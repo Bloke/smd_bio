@@ -101,10 +101,10 @@ if (!defined('txpinterface'))
  * @author Stef Dawson
  * @link   http://stefdawson.com/
  *
- * @tofix Stop smd_bio_iterate from trashing the bio data for future fields of the same name.
- * @todo  Attempt table repair if bio/bio_meta get out of sync.
- * @todo  Ability to specify wildcards/matches for fields/authors in the client tag.
- * @todo  Specify tooltip extended bio information in prefs (cf. what to do about touch devices).
+ * @todo Stop smd_bio_iterate from trashing the bio data for future fields of the same name.
+ * @todo Attempt table repair if bio/bio_meta get out of sync.
+ * @todo Ability to specify wildcards/matches for fields/authors in the client tag.
+ * @todo Specify tooltip extended bio information in prefs (cf. what to do about touch devices).
  */
 if (@txpinterface == 'admin') {
 	add_privs('smd_bio', '1');
