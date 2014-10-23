@@ -100,13 +100,12 @@ if (!defined('txpinterface'))
  *
  * @author Stef Dawson
  * @link   http://stefdawson.com/
+ *
+ * @tofix Stop smd_bio_iterate from trashing the bio data for future fields of the same name.
+ * @todo  Attempt table repair if bio/bio_meta get out of sync.
+ * @todo  Ability to specify wildcards/matches for fields/authors in the client tag.
+ * @todo  Specify tooltip extended bio information in prefs (cf. what to do about touch devices).
  */
-// TOFIX:
-//   stop smd_bio_iterate from trashing the bio data for future fields of the same name
-// TODO:
-//  -> Attempt table repair if bio/bio_meta get out of sync
-//  -> Ability to specify wildcards/matches for fields/authors in the client tag
-//  -> Specify tooltip extended bio information in prefs
 if (@txpinterface == 'admin') {
 	add_privs('smd_bio', '1');
 	register_tab('extensions', 'smd_bio', gTxt('smd_bio_admin_tab'));
@@ -2735,12 +2734,12 @@ h2. Author / Credits
 
 h2. Changelog
 
-* 23 Oct 2014 |0.41 | Fixed array-to-string conversion in javascript comment (thanks aslsw66)
+* 23 Oct 2014 | 0.41 | Fixed array-to-string conversion in javascript comment (thanks aslsw66)
 * 25 Feb 2013 | 0.40 | Improved performance and reduced server load by up to 90% (thanks jakob); plugin lifecycle aware; permitted configurable database column types/sizes and international characters; removed base64 css; added smd_bio_author, smd_bio_data, smd_bio_iterate, smd_if_bio, smd_if_bio_first_author and smd_if_bio_last_author tags; added @show_empty@ attribute; deprecated @author@, @items@ (now @fields@), @labelclass@, @itemwraptag@ (now @break@) and @itemclass@ (now @breakclass@); altered replacement key names; fixed and improved hover tooltips on _Admin->Users_ tab; increased default varchar size to 255 (thanks hablablow); added multi-select lists and permitted checkboxes to be marked as default; added more field types for HTML 5 widgets; enabled @SMD_BIO_FN|function|param|param|...@ support when defining fields to call arbitrary functions; experimental support for item="widget" to display an input control for the given field
 * 08 Jun 2010 | 0.31 | Javascript only appears on admin tab (thanks redbot/Gocom)
-* 31 Aug 2009 | 0.3 | Removed @item@ attribute; fixed warning message if using single items; hidden pref @smd_bio_sanitize_name@ forces sanitized login names
-* 21 Aug 2009 | 0.2 | First public release; no image/thumb output; experimental @options@ attribute removed; container/form accepts Txp tags; fixed textbox size limit (thanks MattD)
-* 14 Jul 2009 | 0.1 | Initial (non-public) release
+* 31 Aug 2009 | 0.30 | Removed @item@ attribute; fixed warning message if using single items; hidden pref @smd_bio_sanitize_name@ forces sanitized login names
+* 21 Aug 2009 | 0.20 | First public release; no image/thumb output; experimental @options@ attribute removed; container/form accepts Txp tags; fixed textbox size limit (thanks MattD)
+* 14 Jul 2009 | 0.10 | Initial (non-public) release
 # --- END PLUGIN HELP ---
 -->
 <?php
