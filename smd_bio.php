@@ -619,7 +619,7 @@ function smd_bio_fields($evt, $stp, $mt, $data) {
 						selectInput($name, $selv, $dflt, false, '', $name),
 						$title,
 						'',
-						'smd_bio_select '.$name
+						'txp-form-field smd_bio_select '.$name
 					);
 					break;
 				case 'multilist':
@@ -640,7 +640,7 @@ function smd_bio_fields($evt, $stp, $mt, $data) {
 						join(n,$items).fInput('hidden',$name,$use_val,'','','','','',$name),
 						$title,
 						'',
-						'smd_bio_select '.$name
+						'txp-form-field smd_bio_select '.$name
 					);
 					break;
 				case 'radio':
@@ -651,7 +651,7 @@ function smd_bio_fields($evt, $stp, $mt, $data) {
 						radioSet($selv, $name, $dflt),
 						$title,
 						'',
-						'smd_bio_radio '.$name
+						'txp-form-field smd_bio_radio '.$name
 					);
 					break;
 				case 'yesnoradio':
@@ -660,7 +660,7 @@ function smd_bio_fields($evt, $stp, $mt, $data) {
 						yesnoRadio($name, $val),
 						$title,
 						'',
-						'smd_bio_radio '.$name
+						'txp-form-field smd_bio_radio '.$name
 					);
 					break;
 				case 'checkbox':
@@ -679,7 +679,7 @@ function smd_bio_fields($evt, $stp, $mt, $data) {
 						join('', $items).fInput('hidden',$name,$use_val,'','','','','',$name),
 						$title,
 						'',
-						'smd_bio_checkbox '.$name
+						'txp-form-field smd_bio_checkbox '.$name
 					);
 					break;
 				case 'textarea':
@@ -691,7 +691,7 @@ function smd_bio_fields($evt, $stp, $mt, $data) {
 						'<textarea id="'.$name.'" name="'.$name.'" class="smd_bio_textarea" cols="'.$size1.'" rows="'.$size2.'">'.txpspecialchars($val).'</textarea>',
 						$title,
 						'',
-						'smd_bio_textarea '.$name
+						'txp-form-field smd_bio_textarea '.$name
 					);
 					break;
 				case 'image':
@@ -708,7 +708,7 @@ function smd_bio_fields($evt, $stp, $mt, $data) {
 						'<input type="text" value="'.txpspecialchars($val).'" id="'.$name.'" name="'.$name.'" size='.INPUT_XSMALL.' class="smd_bio_image_id input_xsmall" />'.selectInput($name.'_list', $selv, $val, true, '').'<span class="smd_bio_image"></span><span class="smd_bio_image_data" title="'.(($size1) ? $size1 : '').','.(($size2) ? $size2 : $size1).'"></span>',
 						$title,
 						'',
-						'smd_bio_image_cell '.$name
+						'txp-form-field smd_bio_image_cell '.$name
 					);
 					break;
 				case 'number':
@@ -721,7 +721,7 @@ function smd_bio_fields($evt, $stp, $mt, $data) {
 						'<input type="'.$widget['type'].'" value="'.txpspecialchars($val).'" name="'.$name.'" id="'.$name.'"'.$min.$max.$jmp.'" class="smd_bio_'.$widget['type'].'" />',
 						$title,
 						'',
-						'smd_bio_'.$widget['type'].' '.$name
+						'txp-form-field smd_bio_'.$widget['type'].' '.$name
 					);
 					break;
 				case 'date':
@@ -740,7 +740,7 @@ function smd_bio_fields($evt, $stp, $mt, $data) {
 						'<input type="'.$widget['type'].'" value="'.txpspecialchars($val).'" name="'.$name.'" id="'.$name.'" size="'.$size1.'" maxlength="'.$size2.'" class="smd_bio_'.$widget['type'].'" />',
 						$title,
 						'',
-						'smd_bio_'.$widget['type'].' '.$name
+						'txp-form-field smd_bio_'.$widget['type'].' '.$name
 					);
 					break;
 			}
