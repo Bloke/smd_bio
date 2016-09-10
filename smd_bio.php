@@ -17,7 +17,7 @@ $plugin['name'] = 'smd_bio';
 // 1 = Plugin help is in raw HTML.  Not recommended.
 # $plugin['allow_html_help'] = 1;
 
-$plugin['version'] = '0.41';
+$plugin['version'] = '0.50';
 $plugin['author'] = 'Stef Dawson';
 $plugin['author_uri'] = 'http://stefdawson.com/';
 $plugin['description'] = 'Customisable user biographies / profile info.';
