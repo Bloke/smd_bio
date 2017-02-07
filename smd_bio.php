@@ -270,7 +270,8 @@ function smd_bio_meta_edit() {
             inputLabel('smd_bio_value', text_area('val', '100', '300', $val, 'smd_bio_value'), 'smd_bio_value', 'smd_bio_val').
             inputLabel('smd_bio_position', fInput('text', 'position', $position, '', '', '', '', '', 'smd_bio_position'), 'smd_bio_position').
             graf(
-                fInput('submit', 'save', gTxt('save'), 'publish')
+                fInput('submit', 'save', gTxt('save'), 'publish'),
+                array('class' => 'txp-edit-actions')
             ).
 
             eInput('smd_bio').
