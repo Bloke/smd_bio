@@ -344,7 +344,7 @@ function smd_bio_meta_list() {
         startTable('', '', 'txp-list').
         n.'<thead>'.
         tr(
-            hCell(fInput('checkbox', 'select_all', 0, '', '', '', '', '', 'select_all'), '', ' scope="col" title="'.gTxt('toggle_all_selected').'" class="multi-edit"').
+            hCell(fInput('checkbox', 'select_all', 0, '', '', '', '', '', 'select_all'), '', ' scope="col" title="'.gTxt('toggle_all_selected').'" class="txp-list-col-multi-edit"').
             column_head('name', 'name', 'smd_bio', true, $switch_dir, '', '', ('name' == $sort) ? $dir : '').
             column_head('title', 'title', 'smd_bio', true, $switch_dir, '', '', ('title' == $sort) ? $dir : '').
             column_head('type', 'type', 'smd_bio', true, $switch_dir, '', '', ('type' == $sort) ? $dir : '').
@@ -359,8 +359,8 @@ function smd_bio_meta_list() {
             extract(doSpecial($a));
 
             $out[] = tr(
-                td(fInput('checkbox', 'selected[]', $name)).
-                td(eLink('smd_bio', 'meta_edit', 'id', $id, $name)).
+                td(fInput('checkbox', 'selected[]', $name), '', ' class="txp-list-col-multi-edit"').
+                td(eLink('smd_bio', 'meta_edit', 'id', $id, $name), '', ' scope="row"').
                 td($title).
                 td($smd_bio_types[$type]['name']).
                 td($size).
