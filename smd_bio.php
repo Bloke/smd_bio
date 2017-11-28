@@ -1669,7 +1669,7 @@ function smd_bio_table_install($showpane=1) {
     }
 
     // Alter the position field from int to varchar so positioning can be non-numeric
-    $ret = @safe_field("DATA_TYPE", "INFORMATION_SCHEMA.COLUMNS", "table_name = '".PFX.SMD_BIO_META."' AND table_schema = '" . $DB->db . "' AND column_name = 'position'");
+    $ret = getThings("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = '".PFX.SMD_BIO_META."' AND table_schema = '" . $DB->db . "' AND column_name = 'position'");
     if ($ret != 'varchar') {
         safe_alter(SMD_BIO_META, "CHANGE `position` `position` VARCHAR( 16 ) NULL DEFAULT ''", $debug);
     }
