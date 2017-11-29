@@ -360,8 +360,8 @@ function smd_bio_meta_list() {
             extract(doSpecial($a));
 
             $out[] = tr(
-                td(fInput('checkbox', 'selected[]', $name), '', ' class="txp-list-col-multi-edit"').
-                td(eLink('smd_bio', 'meta_edit', 'id', $id, $name), '', ' scope="row"').
+                td(fInput('checkbox', 'selected[]', $name), '', 'txp-list-col-multi-edit').
+                td(eLink('smd_bio', 'meta_edit', 'id', $id, $name)).
                 td($title).
                 td($smd_bio_types[$type]['name']).
                 td($size).
@@ -619,7 +619,7 @@ function smd_bio_fields($evt, $stp, $mt, $data) {
         }
 
         $widgets = safe_rows('*', SMD_BIO_META, '1=1 ORDER BY position');
-        $tdac_image = ' class="smd_bio_image_cell"';
+
         foreach ($widgets as $widget) {
             $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : $widget['val'];
             $title = ($widget['title']) ? $widget['title'] : $widget['name'];
