@@ -1,0 +1,11 @@
+{
+  "name": "smd_bio",
+  "description": "Customisable user biographies/profile information",
+  "version": "0.6.0-beta",
+  "type": 5,
+  "author": "Stef Dawson",
+  "author_uri": "https://stefdawson.com/",
+  "order": 5,
+  "flags": 2,
+  "help": {"file" : ["./README.textile"]}
+}
