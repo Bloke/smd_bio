@@ -17,10 +17,10 @@ $plugin['name'] = 'smd_bio';
 // 1 = Plugin help is in raw HTML.  Not recommended.
 # $plugin['allow_html_help'] = 1;
 
-$plugin['version'] = '0.50';
+$plugin['version'] = '0.6.0-beta';
 $plugin['author'] = 'Stef Dawson';
-$plugin['author_uri'] = 'http://stefdawson.com/';
-$plugin['description'] = 'Customisable user biographies / profile info.';
+$plugin['author_uri'] = 'https://stefdawson.com/';
+$plugin['description'] = 'Customisable user biographies/profile information';
 
 // Plugin load order:
 // The default value of 5 would fit most plugins, while for instance comment

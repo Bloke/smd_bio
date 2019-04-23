@@ -1,4 +1,3 @@
-smd_bio
-=======
+h1. smd_bio
 
-Customisable user biographies / profile info for Textpattern CMS.
+Customisable user biographies/profile information within Textpattern CMS.
