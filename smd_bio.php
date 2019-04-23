@@ -56,7 +56,7 @@ $plugin['flags'] = '2';
 
 $plugin['textpack'] = <<<EOT
 #@smd_bio
-smd_bio_admin_tab => Bio config
+smd_bio_admin_tab => Bio configuration
 smd_bio_colsize => Column size
 smd_bio_coltype => Column type
 smd_bio_help => ?
@@ -258,17 +258,18 @@ function smd_bio_meta_edit() {
 
     $toggleState = get_pref('pane_smd_bio_coltype_visible') ? true : false;
 
-    return hed($caption, 1, ' class="txp-heading"').
+    return hed(gTxt('smd_bio_admin_tab'), 1, array('class' => 'txp-heading')).
         form(
-            '<div class="txp-edit">'.
-            inputLabel('name', ($id && $step == 'meta_edit' ? strong($name) : fInput('text', 'name', $name, '', '', '', '', '', 'name')), 'name').
-            inputLabel('title', fInput('text', 'title', $title, '', '', '', '', '', 'title'), 'title').
+        '<div class="txp-edit">'.
+            hed($caption, 2).
+            inputLabel('name', ($id && $step == 'meta_edit' ? strong($name) : fInput('text', 'name', $name, '', '', '', INPUT_REGULAR, '', 'name')), 'name').
+            inputLabel('title', fInput('text', 'title', $title, '', '', '', INPUT_REGULAR, '', 'title'), 'title').
             inputLabel('smd_bio_widget_type', selectInput('type', $selv, $type, false, '', 'smd_bio_widget_type') .sp. '<a id="smd_bio_colgroup" class="txp-summary lever'.(($toggleState) ? ' expanded' : '').'" href="#">'.gTxt('smd_bio_more').'</a>', 'type').
             inputLabel('smd_bio_coltype', selectInput('coltype', $coltypes, $coltype, false, '', 'smd_bio_coltype'), 'smd_bio_coltype', '', 'txp-form-field smd_bio_coltype '.(($toggleState) ? '' : ' smd_bio_toggler')).
-            inputLabel('smd_bio_colsize', fInput('number', 'colsize', $colsize, '', '', '', '', '', 'smd_bio_colsize'), 'smd_bio_colsize', '', 'txp-form-field smd_bio_coltype '.(($toggleState) ? '' : ' smd_bio_toggler')).
-            inputLabel('smd_bio_size', fInput('text', 'size', $size, '', '', '', '', '', 'smd_bio_size'), 'smd_bio_size', 'smd_bio_size').
-            inputLabel('smd_bio_value', text_area('val', '100', '300', $val, 'smd_bio_value'), 'smd_bio_value', 'smd_bio_val').
-            inputLabel('smd_bio_position', fInput('text', 'position', $position, '', '', '', '', '', 'smd_bio_position'), 'smd_bio_position').
+            inputLabel('smd_bio_colsize', fInput('number', 'colsize', $colsize, '', '', '', INPUT_SMALL, '', 'smd_bio_colsize'), 'smd_bio_colsize', '', 'txp-form-field smd_bio_coltype '.(($toggleState) ? '' : ' smd_bio_toggler')).
+            inputLabel('smd_bio_size', fInput('text', 'size', $size, '', '', '', INPUT_XSMALL, '', 'smd_bio_size'), 'smd_bio_size', 'smd_bio_size').
+            inputLabel('smd_bio_value', text_area('val', '', '', $val, 'smd_bio_value'), 'smd_bio_value', 'smd_bio_val').
+            inputLabel('smd_bio_position', fInput('text', 'position', $position, '', '', '', INPUT_XSMALL, '', 'smd_bio_position'), 'smd_bio_position').
             graf(
                 fInput('submit', 'save', gTxt('save'), 'publish'),
                 array('class' => 'txp-edit-actions')
