@@ -1,0 +1,476 @@
+h1. smd_bio
+
+Configure additional user biographical information to be collected when authors are created, then show that info as bylines against your articles. Like custom fields for user info.
+
+h2. Features
+
+* Define only the info you require to be collected about your users -- totally customisable.
+* Info is entered/edited on the _Admin->Users_ tab beneath the existing user info (i.e. Publishers only) but also integrates with smd_user_manager.
+* Choose from a variety of types of content: text, radio buttons, select lists, checkboxes, images...
+* Output any pieces of biographical info in your article flow in a variety of ways.
+* Image thumbnail preview/selection on the _Admin->Users_ tab.
+* Optional CSS to modify the layout of the _Admin->Users_ tab.
+
+h2. Installation / Uninstallation
+
+p(important). Requires Textpattern 4.7+
+
+Download the plugin from either "textpattern.org":https://textpattern.org/plugins/1116/smd_bio, or the "software page":https://stefdawson.com/sw, paste the code into the Textpattern _Admin->Plugins_ pane, install and enable the plugin. The plugin's tables will be installed automatically. Visit the "forum thread":https://forum.textpattern.com/viewtopic.php?id=31496 for more info or to report on the success or otherwise of the plugin.
+
+When you visit the _Extensions->Bio config_ page, the plugin's tables will be checked and installed/upgraded automatically if not present already. This is a convenience for people who run the plugin from the cache directory.
+
+To uninstall, delete the plugin from the _Admin->Plugins_ page. *All additional user tables and bio information will be removed* so be sure you have backed everything up first.
+
+h2(#smd_bio_config). Configuring bio fields
+
+Visit the _Extensions->Bio config_ tab. Add bio fields such as cell/work/fax numbers, department, mugshot, postal address, job title, whatever you wish. Just add one at a time and hit Save in between. The fields will be listed below the form, and can be sorted at will. Each field comprises:
+
+; *Name*
+: An internal name with which you wish to refer to your bio field. Avoid characters such as spaces and 'weird' characters here. *This cannot be changed, once set*
+; *Title*
+: A human-friendly name for your bio field. This is displayed to the left of the input control on the _Admin->Users_ panel, and as a label on your article pages.
+: If you omit the *Name* then this Title will be "dumbed down" to valid characters and used as the Name.
+; *Type*
+: The type of data you wish to collect. This will be the flavour of input control you see on the _Admin->Users_ panel
+; *Column type* (click 'More' to toggle)
+: The database column type that is created. If you don't know what this is, just accept the default, otherwise specify which type of data this column is to hold
+: Note that some types of biographical information (e.g. images) are forced to be of a certain column type
+: IMPORTANT: if you alter this after it has been created, any existing bio data in the field will be altered to suit and *you may lose information*. Please backup first
+; *Column size* (click 'More' to toggle)
+: Some column types -- most notably the varchar types -- require a column width (or display width) to be specified. Put a value here if you wish to use a size other than the default. If you don't know what this is, just accept the default
+: Note that most column types do not require a size so if you do specify one it will be ignored
+: IMPORTANT: if you alter this after it has been created, any existing bio data in the field will be altered to suit and *you may lose information*. Please backup first
+; *Size*
+: The dimensions of the chosen input control. Takes one or two comma-separated values, the interpretation of which depends on the field _Type_:
+:: For text-based input fields, the first is the width of the box (in characters) and the second is the maximum number of characters a user can type (0 = leave at default)
+:: For numeric-based input fields, the values are the minimum permitted value, the maximum permitted value, and the acceptable interval (step) that value can take
+:: For textareas, it is the width and height of the box in characters, respectively
+:: For images, the two values are the x and y dimensions of the image/thumbnail on the _Admin->Users_ tab. If only one value is given, the image will be square. If either value is omitted, the image or thumbnail dimensions (as stored in the database) are used instead
+:: For other types, the Size is currently unused
+; *Value*
+: Depends on the field _Type_:
+:: For text- and number-based fields, this is the default value that will be placed in the text box. You can use this to initialise an entry, or offer instructions like "Type your job description here"
+:: For images, it can be used to specify the parent category name under which the desired images are stored. If omitted, all images are available in the image select list
+:: For list, radio and checkbox types, this is used to configure the available options:
+::: Either put one option per line or use a comma to separate each option.
+::: If you just list options, they will be used as labels exactly as you define them. When referring to them with the public tags, the field _names_ will be all lower case, have 'non-web-safe' characters removed, and will have spaces converted to underscores. See the "example":#smd_bio_list_example for further details.
+::: In select lists, you may put an empty option at the top if you wish by beginning the list with a comma.
+::: In select lists, checkbox and radio sets you may also mark label(s) with @[*]@ to indicate it is a default checked/selected value. Radio sets and single-select lists only permit one marker.
+; *Position*
+: The order in which the fields appear on the __Admin->Users__ tab
+: You can use any alphanumeric system to sort, e.g @10, 20, 30,...@ or @a, b, c...@. The lower the value the higher up the screen it will be
+
+h3(#smd_bio_list_example). Defining your own lists
+
+There are a few of ways to define your own names and/or labels for use in select lists, radio sets and checkbox groups:
+
+bc. label_1
+label_2
+label_3
+...
+
+or
+
+bc. label_1, label_2, label_3, ...
+
+or
+
+bc. name_1 => label_1, name_2 => label_2, name_3...
+
+(you may also put each name-label pair on a separate line if you wish). Here's an example for a dropdown list of Departments:
+
+bc. sales => Sales
+mktg => Marketing
+eng => Engineering
+qual => Quality assurance
+it => Tech support
+
+If you defined the list as above, your field names would be @sales@, @mktg@, @eng@, @qual@ and @it@, respectively.
+
+If, however, you omit the field names, viz:
+
+bc. Sales
+Marketing
+Engineering
+Quality assurance
+Tech support
+
+then you would refer to the fields with: @sales@, @marketing@, @engineering@, @quality_assurance@, and @tech_support@, respectively.
+
+For multiple select lists and checkbox groups you can optionally define some of the entries as defaults. For example in your @subscriptions@ checkbox group:
+
+bc. Kerrang
+Future Music[*]
+NME
+Sound on Sound[*]
+
+The same system applies to single or multiple select lists and radio sets, although for single selects and radio sets, only one element may be starred (if you star more, only one of the defaults will prevail).
+
+There is one further method of entering data, and that is to call another PHP function. Perhaps you want to offer a select list of all countries of the world. You could type them in or copy and paste them from the Internet as long as they were in the correct @key => value@ or comma-separated format. Alternatively you could put this in the _Value_ box:
+
+bc. SMD_BIO_FN|function_name|param_1|param_2|...
+
+As long as that named function returns a standard PHP array, the values and any keys returned will be injected into the _Value_ box automatically.
+
+h2. Entering user data: _Admin->Users_
+
+Your configured fields will appear on the _Admin->Users_ panel, beneath the usual crop of data input fields. Simply enter data in them and it will be saved along with the existing user data. Hit _Edit_ and any configured info will be retrieved for editing.
+
+When choosing an image, you can either type its ID in the box or use the dropdown select list to choose an image. The chosen image will appear below the input controls.
+
+If you wish to alter the layout of the input controls, you may create a standard stylesheet in _Presentation->Style_ and name it @smd_bio@. It will be loaded automatically when you visit the _Admin->Users_ panel.
+
+To quickly view the extended bio information for a user, hover over the user's login name link in the list; a tooltip will appear showing some of the extended bio. The data is fetched from the server when you first hover over the row so it may take a few seconds to load (and may require you to wiggle the mouse around a bit to get it to display, sorry!)
+
+h2. Entering user data: _Admin->User manager_
+
+If you have the smd_user_manager plugin installed, smd_bio will hook into that plugin. When you hover over the login name of an entry in the User list, detailed bio information is retrieved and displayed as a tooltip. Editing a user will also permit Bio information to be entered.
+
+h2. Displaying user bio info on your site
+
+When you create a new _field_ in the "Bio Config":#smd_bio_config pane, it has various attributes like name, title, size, value, etc. The @name@ is the key: that is how you refer to the field using the @field@ or @fields@ attributes in the various tags (below).
+
+Each field has a variety of pieces of data that you may display. These are known as @items@ and the primary ones are:
+
+# @value@ : the current value of the field that has been selected / typed by the user in their profile.
+# @title@ : the human friendly title (a.k.a. _label_) that you have assigned to your field in the Bio Config screen -- this is handy if you want to print out the title alongside the data value itself, e.g. Department: sales.
+# @name@ : the field's key (shown in the 'Name' column on the Bio Config panel). This is of less everyday use, but when building your own input screens for capturing bio data, it becomes handy so you can tell mem_form the name of the field it needs to store the bio data item in.
+
+There are other items useful for displaying the field type, various counters, or for diving deeper into the available options in lists, radio sets, checkboxes, etc, but the most important concept is that a @field@ is your bio thingamybob (it's Name / Key), and an @item@ is the part of thingamybob you want to display: its value, title, name (a.k.a. key), type, default values, and so on.
+
+h2(#smd_bio_info). Tag: @<txp:smd_bio_info>@
+
+Use this tag to display pieces of info from a user's biography. One or more of these tags can be employed depending on how you prefer to work. It may also be used as a container (or via the @form@ attribute) to allow you to embed other Textpattern tags.
+
+This tag requires article context so you normally use it inside @<txp:if_individual_article>@ tags. By default it will look up the author of the currently viewed article and display the given bio fields from that author.
+
+If you're trying to display bio info in a sidebar or on a list page that does not necessarily have article context, you need to specify the author(s) that you wish to display bio info from. In v0.3x you did that with the @authors@ attribute; in v0.4x you wrap your @<txp:smd_bio_info>@ tag in an "smd_bio_author":#smd_bio_author tag.
+
+Use the following attributes to tweak this tag's output. The default value is unset unless otherwise noted:
+
+; *fields*
+: List of bio field _names_ you wish to display, in the order you wish to display them.
+: Note you can also display bio information from the standard Textpattern user table, i.e. you can use any of the following, (case sensitive) : @user_id@, @name@ (login name), @RealName@, @email@, @privs@, @last_access@
+: Default: unset (i.e. all fields)
+; *exclude*
+: List of bio field _names_ you do *not* wish to display. This overrides @fields@
+; *form*
+: The name of a Txp Form with which to process each record.
+: If not specified, the tag's container will be used.
+: If the container is empty, default output is used (label and field contents).
+; *wraptag*
+: HTML tag (without angle brackets) to wrap around each record.
+; *class*
+: Fixed CSS class name to add to each record's wraptag.
+; *break*
+: HTML tag to put between each field.
+; *breakclass*
+: CSS class name to add to each field's wraptag.
+: The default is to automatically assign @smd_bio_*name_of_field*@ (e.g. smd_bio_cell, smd_bio_dept, etc).
+; *labeltag*
+: HTML tag (without angle brackets) to wrap around the field's label.
+; *label*
+: Whether to display a label or not for each field. Choose from:
+:: *1* : (default) Display the Title of the field
+:: *0* : Display the Name of the field
+:: *some label* : Display the given text as a label
+:: "" (i.e. empty) : Do not display any label
+; *show_empty*
+: Choose if you wish to hide (0) or show (1) any fields that have no data assigned to them.
+: Default: 0
+
+h2(#smd_bio_author). Tag: @<txp:smd_bio_author>@
+
+Wrap this tag around @<txp:smd_bio_info>@ tags to display information from more than one user. The contained content will be displayed for each author.
+
+; *author*
+: Comma-separated list of author login names from which you wish to display info.
+: If omitted, the current (individual article) author will be used -- functionally the same as if you just used @<txp:smd_bio_info />@ without the author wrapper tag.
+: You may specify any of your comma-separated entries as @SMD_PRIVS:@ and then colon-separate the priv numbers. Any users with those matching level(s) will be displayed.
+: You may also use @SMD_ALL@ to return all defined authors.
+; *sort*
+: Order the authors by the given comma-separated list of columns and sort directions. You can order the results by any of the built-in user columns (RealName, name, user_id, email, last_access, privs) or your own bio fields.
+: For the sort order you can choose from:
+:: *asc*: ascending order
+:: *desc*: descending order
+: Default: @RealName asc@
+; *form*
+: The name of a Txp Form with which to process each author.
+: If not specified, the tag's container will be used.
+: If the container is empty, the name of the author is displayed.
+; *wraptag*
+: HTML tag (without angle brackets) to wrap around the entire output.
+; *class*
+: CSS class name to add to the wraptag.
+; *break*
+: HTML tag (without angle brackets) to wrap around each author record.
+; *breakclass*
+: CSS class name to apply to each break tag.
+; *labeltag*
+: HTML tag (without angle brackets) to wrap around the label.
+; *label*
+: The label text to display above all author info.
+
+h2(#smd_bio_data). Tag: @<txp:smd_bio_data>@ ^(formerly "replacement keys":#smd_bio_repkeys)^
+
+Inside your "smd_bio_info":#smd_bio_info form or container you can display biographical information using this tag. The following attributes select which piece of information to display:
+
+; *field*
+: The bio field from you wish to display some information (e.g. cell, phone, address, department, ...).
+; *item*
+: Comma-separated list of actual piece(s) of information you need about the field. Choose from:
+:: *value* : the field's content. Functionally equivalent to @{smd_bio_*field*}@.
+:: *name* : the field's name, as defined on the Bio Config tab. Equivalent to @{smd_bio_*field*_name}@.
+:: *title* : the field's "human friendly" title, as defined on the Bio Config tab. Equivalent to @{smd_bio_*field*_title}@.
+:: *type* : the field's data type (text, textarea, checkbox, select list, etc). Note that there is no distinction between a single checkbox and a group of them; they are all designated @checkbox@.
+:: *default* : the field's pre-initialized, or default value. This is only set for non-list field types: list fields have individual 'default_option_N' entries instead (see below).
+:: *option_N* : the name (key) of the Nth option in a list (select, radio, checkbox group).
+:: *title_N* : the title of the Nth option in a list.
+:: *chosen_option_N* : the name (key) of the Nth selected option in a list  (select, radio, checkbox group).
+:: *chosen_title_N* : the label of the Nth selected option in a list.
+:: *default_option_N* : the name (key) of the Nth default option
+:: *option_count* : the total number of list options.
+:: *chosen_count* : the total number of selected list entries.
+:: *default_count* : the total number of default list entries.
+:: *iterate_option* : the name of the current option being iterated (see "smd_bio_iterate":#smd_bio_iterate).
+:: *iterate_title*: the human-friendly title of the current option being iterated.
+:: *iterate_count* : The option number count (starting from 1).
+:: *iterate_is_default* : if you are iterating over @all@ options, this will be set to 1 if the option is one of the options that should be set by default if nothing has already been chosen. 0 otherwise.
+:: *iterate_is_chosen* : if you are iterating over @all@ options, this will be set to either @checked@ or @selected@ (depending on the field's type) if the current option is chosen.
+:: *widget* : an HTML input control of the correct type for this field. Multi select options are prefixed with @ms_@ and each checkbox value in a group is prefixed with @cb_@ when submitted. Note also that 'image' fields render a simple text input field because they only store a standard Textpattern image ID; if you want to do anything more elaborate you will have to roll it yourself. Use widgets inside one of the following constructs to allow updating of bio fields from the public site / dashboards:
+::: @<txp:mem_form type="smd_bio">@
+::: @<txp:mem_self_register>@
+::: @<txp:mem_self_user_edit>@
+: Default: @value@
+; *wraptag*
+: HTML tag (without angle brackets) to wrap around the entire output.
+; *class*
+: Fixed CSS class name to add to the wraptag.
+; *break*
+: HTML tag or characters to put between each item.
+
+If you wish to see an entire list of available data, add @debug="1"@ to the surrounding smd_bio_info tag.
+
+h3(#smd_bio_repkeys). @<txp:smd_bio_info>@ replacement keys ^(*deprecated*)^
+
+The "smd_bio_data":#smd_bio_data tag will be able to fit all your bio display needs. There is, however, a legacy method of displaying data using __replacement keys__. These should be considered deprecated and their use discouraged in favour of the smd_bio_data tag. They may be removed in future versions of the plugin.
+
+The main replacement keys are:
+
+; @{smd_bio_*field*}@
+: The value of the named field (e.g. @smd_bio_cell@, @smd_bio_department@, etc).
+; @{smd_bio_*field*_name}@
+: Sanitized name of the column corresponding to this named field.
+; @{smd_bio_*field*_title}@
+: Human-friendly title you assigned this named field.
+; @{smd_bio_*field*_class}@
+: Name of the class associated with this named field.
+
+If you have elected to extract a list item such as radio, list or checkbox you will have some more replacement keys in the following format:
+
+; @{smd_bio_*field*_option_N}@
+: The value of each named option in turn, where N starts at 1 and increments.
+; @{smd_bio_*field*_title_N}@
+: The value of each named option's title in turn. Again, N starts at 1 and counts up for every option in your list.
+; @{smd_bio_*field*_chosen_option_N}@
+: The value of each selected option in turn, where N starts at 1 and increments.
+: For select and radio lists there will be only one; for checkbox groups there may be more.
+; @{smd_bio_*field*_chosen_title_N}@
+: The value of each selected option's label in turn, where N starts at 1 and increments.
+; @{smd_bio_*field*_option_count}@
+: The total number of elements in the named list.
+; @{smd_bio_*field*_chosen_count}@
+: The total number of selected elements in the named list.
+
+Further, if you are displaying just a single @field@, these replacements (backwards compatible with smd_bio v0.3x) are present:
+
+; @{smd_bio_info_item}@
+: The value of the current field -- Deprecated: use @{smd_bio_info_value}@ instead.
+; @{smd_bio_info_name}@
+: The sanitized name of the column corresponding to the field.
+; @{smd_bio_info_title}@
+:  The human-friendly title you assigned the field.
+; @{smd_bio_info_itemclass}@
+: The name of this field's class -- Deprecated: use @{smd_bio_info_class}@ instead.
+
+h2(#smd_if_bio). Tag: @<txp:smd_if_bio>@
+
+A simple conditional for testing a field / item. Must be used inside a @<txp:smd_bio_info />@ tag to test for the existence/value of one of your chosen bio items. Use smd_if for more complex conditional logic. Supports @<txp:else />@.
+
+; *field*
+: The bio field from you wish to check (e.g. department, preferred_contact, phone_number,...)
+; *item*
+: The actual piece of information you want to compare from the field. Choose from the same items as defined in the @item@ attribute for the "smd_bio_data":#smd_bio_data tag.
+: Default: @value@
+; *value*
+: The value you wish to compare the field/item against.
+: If omitted, the tag will just check for the existence of the given field/item
+
+h2(#smd_if_bio_first_author). Tag: @<txp:smd_if_bio_first_author>@
+
+Parses the container if the current author is the first in the list. Must be used inside a @<txp:smd_bio_info />@ tag, and supports @<txp:else />@.
+
+h2(#smd_if_bio_last_author). Tag: @<txp:smd_if_bio_last_author>@
+
+Parses the container if the current author is the last in the list. Must be used inside a @<txp:smd_bio_info />@ tag, and supports @<txp:else />@.
+
+h2(#smd_bio_iterate). Tag: @<txp:smd_bio_iterate>@
+
+Step through select list, checkbox, and radio sets with this tag, displaying info about each option as you go. Useful if you want to roll your own widgets or do some custom interaction.
+
+; *field*
+: The bio field over which you wish to iterate (e.g. preferred_contact, subscription, favourite_rockstar, ...). Must be a 'list' or 'group' field.
+; *using*
+: The type of info you want to iterate over. Choose from:
+:: @chosen@: step over chosen (selected, checked) options.
+:: @default@: step over default (pre-selected) options.
+:: @all@: step over all items in the group, whether selected or not.
+: Default: @chosen@
+; *display*
+: The piece of information you wish to output from the option. This attribute is ignored if you use a @form@ or the container. Choose from:
+:: @option@: the internal name of the option
+:: @title@: the option's human-friendly title
+: Default: @title@
+; *form*
+: The name of a Textpattern Form with which to process each option.
+: If not specified, the tag's container will be used.
+: If the container is empty, default output is used (the option's value).
+; *wraptag*
+: HTML tag (without angle brackets) to wrap around the group.
+; *class*
+: Fixed CSS class name to add to the group's wraptag.
+; *break*
+: HTML tag to put between each option.
+; *breakclass*
+: CSS class name to add to each option's wraptag.
+; *limit*
+: The maximum number of options to iterate over.
+: Default: 0 (i.e. all of them)
+; *offset*
+: The number of options to skip before starting to display options.
+: Default: 0
+
+See the "smd_bio_data":#smd_bio_data tag for details of what you can display / test inside this tag's container.
+
+h2(#smd_bio_articles). Tag: @<txp:smd_bio_articles>@
+
+A simple convenience wrapper for @<txp:article_custom />@ that sets the @author@ attribute to the person who wrote the current article. If you specify an author, that person will be used instead. In all other regards, the tag functions identically to "article_custom":https://textpattern.net/wiki/index.php?title=article_custom and can be used as a container if you wish.
+
+p(important). IMPORTANT: take care when using this tag inside your default form. If you do not specify your own container or a dedicated @form@, you will receive a _circular reference error_ from Textpattern as it tries to call the default form, which calls the default form, which calls the default form...
+
+h3(#smd_bio_examples). Examples
+
+h2(#smd_bio_eg1). Example 1: List bio fields from author of current article
+
+bc. <txp:smd_bio_info
+     fields="jobtitle, extension, cell, department"
+     labeltag="dt" wraptag="dl"
+     break="dd" class="profile" />
+
+Shows the job title, work's extension number, cell phone number and department of the current author, as a definition list with class @profile@.
+
+h2(#smd_bio_eg2). Example 2: List profiles for named + priv level users
+
+bc. <txp:smd_bio_author wraptag="div" class="authors"
+     author="mr_pub, SMD_PRIVS:4:3">
+   <txp:smd_bio_info
+     fields="name, RealName, department"
+     labeltag="dt" wraptag="dl"
+     break="dd" />
+</txp:smd_bio_author>
+
+Shows the name, real name and department of all _Copy Editors_ (3) and _Staff Writers_ (4) and the user 'mr_pub'.
+
+h2(#smd_bio_eg3). Example 3: Using smd_bio_articles and smd_bio_info as a container
+
+bc. <txp:smd_bio_info fields="photo, department, RealName">
+   <txp:image id='<txp:smd_bio_data field="photo" />' />
+   Recent articles by
+   <a href="/desks/<txp:smd_bio_data field="department" />">
+      <txp:smd_bio_data field="RealName" />
+   </a>:
+</txp:smd_bio_info>
+<txp:smd_bio_articles limit="6"
+     wraptag="ul" break="li">
+   <txp:permlink><txp:title /></txp:permlink>
+</txp:smd_bio_articles>
+
+Displays the author photo, the author's RealName linked to the section that explains about the department to which she belongs, then lists the 6 most recent articles by her. Note the use of @<txp:smd_bio_data />@ to feed @<txp:image />@ with the ID of the selected photo.
+
+h2(#smd_bio_eg4). Example 4: checkboxes, lists and radios
+
+bc. <txp:smd_bio_author="SMD_PRIVS:5">
+   <txp:smd_bio_info fields="name, image, contact_by,
+      subscribed, department">
+      <a class="image"
+        href="/blog/<txp:smd_bio_data field="name" />"
+        title="browse other posts by this author">
+         <img class="thumb"
+           src="/images/<txp:smd_bio_data field="image" />.jpg" />
+      </a>
+      <div class="summary">
+         <h3>Department</h3><txp:smd_bio_data field="department" />
+         <h3>Bio</h3><txp:smd_bio_data field="profile" />
+         <h3>Preferred contact method</h3><txp:smd_bio_data field="contact_by" />
+         <h3>Subscribed to</h3><txp:smd_bio_data field="subscribed" />
+      </div>
+   </txp:smd_bio_info>
+</txp:smd_bio_author>
+
+h2(#smd_bio_eg5). Example 5: telephone directory of users
+
+If you have some bio fields such as surname, forename, department, phone, avatar, and so forth you could display a quick directory of all your users as follows. The snippet of PHP is just a quick way of getting the first letter of the surname; you could be far more creative here and link to a full bio or filter by letter, and so on.
+
+bc.. <txp:smd_bio_author author="SMD_ALL" sort="surname asc">
+
+   <txp:smd_bio_info wraptag="dl">
+      <txp:php>
+         global $variable;
+         $variable['initial'] = substr(
+            smd_bio_data(array('field' => 'surname')),
+            0, 1);
+      </txp:php>
+
+      <txp:if_different><dt><txp:variable name="initial" /></dt></txp:if_different>
+
+      <dd class="name">
+         <txp:smd_bio_data field="surname" />,
+         <txp:smd_bio_data field="forename" />
+      </dd>
+
+      <txp:smd_if_bio field="department">
+         <txp:smd_bio_data field="department"
+            item="title, value" break=": "  wraptag="dd" />
+      </txp:smd_if_bio>
+
+      <txp:smd_if_bio field="phone">
+         <txp:smd_bio_data field="phone"
+            item="title, value" break=": "  wraptag="dd" />
+      </txp:smd_if_bio>
+   </txp:smd_bio_info>
+
+</txp:smd_bio_author>
+
+h2(#smd_bio_eg6). Example 6: updating a profile from the public side
+
+With mem_form installed and some suitable privilege wrapper plugin such as rvm_privileged or cbe_frountauth you can present a public profile for your users to maintain. This example uses @<txp:mem_form>@ with the @type="smd_bio"@ attribute but the plugin is equally at home within @<txp:mem_self_register>@ (so you can capture extended bio information at sign-up time) or inside @<txp:mem_self_user_edit_form>@.
+
+bc.. <txp:mem_form type="smd_bio">
+
+<txp:smd_bio_info show_empty="1">
+   <br /><txp:smd_bio_data field="name" item="title, widget" break=": " />
+   <br /><txp:smd_bio_data field="RealName" item="title, widget" break=": " />
+   <br /><txp:smd_bio_data field="email" item="title, widget" break=": " />
+   <br /><txp:smd_bio_data field="avatar" item="title, widget" break=": " />
+   <br /><txp:smd_bio_data field="mini_bio" item="title, value" break=": " />
+   <br /><txp:smd_bio_data field="phone_home" item="title, widget" break=": " />
+   <br /><txp:smd_bio_data field="phone_work" item="title, widget" break=": " />
+   <br /><txp:smd_bio_data field="marketing_preference" item="title, widget" break=": " />
+</txp:smd_bio_info>
+<txp:mem_submit />
+
+</txp:mem_form>
+
+h2. Author / Credits
+
+"Stef Dawson":https://stefdawson.com/contact. The plugin is a logical extension of pvc_users_info by Peter V. Cook (the smd_bio_articles tag is essentially the same as pvc_author_articles). Thanks also to pieman for setting the wheels in motion and net-carver for his inimitable knack of making things better.

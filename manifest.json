@@ -1,0 +1,11 @@
+{
+  "name": "smd_bio",
+  "description": "Customisable user biographies / profiles info within Textpattern CMS",
+  "version": "0.5.0",
+  "type": 5,
+  "author": "Stef Dawson",
+  "author_uri": "https://stefdawson.com/",
+  "order": 5,
+  "flags": 2,
+  "help": {"file" : ["./README.textile"]}
+}

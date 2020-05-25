@@ -1,0 +1,56 @@
+h1. Changelog
+
+h2. 0.5.0 - 2020-05-25
+
+* Use Txp 4.7.0-style language identifiers.
+* Add class @txp-form-field@ to wrapping divs for all bio fields in admin (thanks, johnstephens).
+* Fix classnames and scope (thanks, philwareham and phiw13).
+* Fix SQL errors when creating columns.
+* Fix MySQL restrictions on DEFAULT column types.
+* Alter default column types for most columns. Text-based columns are way too big and result in performance issues as they cannot be cached.
+* Register tags.
+* Layout fix for 'More' widgets.
+* Use @getThings()@ instead of @safe_field()@ to avoid triggering a bug (thanks, makss).
+
+h2. 0.4.1 | 2014-10-23
+
+* Fixed array-to-string conversion in JavaScript comment (thanks, aslsw66)
+
+h2. 0.4.0 | 2013-02-25
+
+* Improve performance and reduced server load by up to 90% (thanks, jakob).
+* Plugin lifecycle aware.
+* Permit configurable database column types/sizes and international characters.
+* Removed base64 css.
+* Add @<txp:smd_bio_author />@, @<txp:smd_bio_data />@, @<txp:smd_bio_iterate />@, @<txp:smd_if_bio />@, @<txp:smd_if_bio_first_author />@ and @<txp:smd_if_bio_last_author />@ tags.
+* Add @show_empty@ attribute;.
+* Deprecate @author@, @items@ (now @fields@), @labelclass@, @itemwraptag@ (now @break@) and @itemclass@ (now @breakclass@) attributes.
+* Alter replacement key names.
+* Fixe and improve hover tooltips on Admin->Users tab.
+* Increase default varchar size to 255 (thanks, hablablow).
+* Add multi-select lists and permitted checkboxes to be marked as default.
+* Add more field types for HTML 5 UI elements.
+* Enable @SMD_BIO_FN|function|param|param|...@ support when defining fields to call arbitrary functions.
+* Experimental support for item="widget" to display an input control for the given field.
+
+h2. 0.3.1 | 2010-06-08
+
+* JavaScript only appears on admin tab (thanks, redbot/Gocom).
+
+h2. 0.3.0 | 2009-08-31
+
+* Remove @item@ attribute.
+* Fix warning message if using single items.
+* Hidden pref @smd_bio_sanitize_name@ forces sanitized login names.
+
+h2. 0.2.0 | 2009-08-21
+
+* First public release.
+* Fix no image/thumb output.
+* Remove experimental @options@ attribute.
+* Container/form accepts Txp tags.
+* Fix textbox size limit (thanks, MattD).
+
+h2. 0.1.0 | 2009-07-14
+
+* Initial (non-public) release

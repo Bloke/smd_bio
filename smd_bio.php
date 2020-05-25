@@ -20,7 +20,7 @@ $plugin['name'] = 'smd_bio';
 $plugin['version'] = '0.5.0';
 $plugin['author'] = 'Stef Dawson';
 $plugin['author_uri'] = 'https://stefdawson.com/';
-$plugin['description'] = 'Customisable user biographies / profile info.';
+$plugin['description'] = 'Customisable user biographies / profiles.';
 
 // Plugin load order:
 // The default value of 5 would fit most plugins, while for instance comment
@@ -2356,7 +2356,7 @@ h2. Features
 
 h2. Installation / Uninstallation
 
-p(important). Requires Textpattern 4.5+
+p(important). Requires Textpattern 4.7+
 
 Download the plugin from either "textpattern.org":https://textpattern.org/plugins/1116/smd_bio, or the "software page":https://stefdawson.com/sw, paste the code into the Textpattern _Admin->Plugins_ pane, install and enable the plugin. The plugin's tables will be installed automatically. Visit the "forum thread":https://forum.textpattern.com/viewtopic.php?id=31496 for more info or to report on the success or otherwise of the plugin.
 
@@ -2407,22 +2407,22 @@ h3(#smd_bio_list_example). Defining your own lists
 
 There are a few of ways to define your own names and/or labels for use in select lists, radio sets and checkbox groups:
 
-bc(block). label_1
+bc. label_1
 label_2
 label_3
 ...
 
 or
 
-bc(block). label_1, label_2, label_3, ...
+bc. label_1, label_2, label_3, ...
 
 or
 
-bc(block). name_1 => label_1, name_2 => label_2, name_3...
+bc. name_1 => label_1, name_2 => label_2, name_3...
 
 (you may also put each name-label pair on a separate line if you wish). Here's an example for a dropdown list of Departments:
 
-bc(block). sales => Sales
+bc. sales => Sales
 mktg => Marketing
 eng => Engineering
 qual => Quality assurance
@@ -2432,7 +2432,7 @@ If you defined the list as above, your field names would be @sales@, @mktg@, @en
 
 If, however, you omit the field names, viz:
 
-bc(block). Sales
+bc. Sales
 Marketing
 Engineering
 Quality assurance
@@ -2442,7 +2442,7 @@ then you would refer to the fields with: @sales@, @marketing@, @engineering@, @q
 
 For multiple select lists and checkbox groups you can optionally define some of the entries as defaults. For example in your @subscriptions@ checkbox group:
 
-bc(block). Kerrang
+bc. Kerrang
 Future Music[*]
 NME
 Sound on Sound[*]
@@ -2818,14 +2818,6 @@ h2. Author / Credits
 
 "Stef Dawson":https://stefdawson.com/contact. The plugin is a logical extension of pvc_users_info by Peter V. Cook (the smd_bio_articles tag is essentially the same as pvc_author_articles). Thanks also to pieman for setting the wheels in motion and net-carver for his inimitable knack of making things better.
 
-h2. Changelog
-
-* 23 Oct 2014 | 0.41 | Fixed array-to-string conversion in javascript comment (thanks aslsw66)
-* 25 Feb 2013 | 0.40 | Improved performance and reduced server load by up to 90% (thanks jakob); plugin lifecycle aware; permitted configurable database column types/sizes and international characters; removed base64 css; added smd_bio_author, smd_bio_data, smd_bio_iterate, smd_if_bio, smd_if_bio_first_author and smd_if_bio_last_author tags; added @show_empty@ attribute; deprecated @author@, @items@ (now @fields@), @labelclass@, @itemwraptag@ (now @break@) and @itemclass@ (now @breakclass@); altered replacement key names; fixed and improved hover tooltips on _Admin->Users_ tab; increased default varchar size to 255 (thanks hablablow); added multi-select lists and permitted checkboxes to be marked as default; added more field types for HTML 5 widgets; enabled @SMD_BIO_FN|function|param|param|...@ support when defining fields to call arbitrary functions; experimental support for item="widget" to display an input control for the given field
-* 08 Jun 2010 | 0.31 | Javascript only appears on admin tab (thanks redbot/Gocom)
-* 31 Aug 2009 | 0.30 | Removed @item@ attribute; fixed warning message if using single items; hidden pref @smd_bio_sanitize_name@ forces sanitized login names
-* 21 Aug 2009 | 0.20 | First public release; no image/thumb output; experimental @options@ attribute removed; container/form accepts Txp tags; fixed textbox size limit (thanks MattD)
-* 14 Jul 2009 | 0.10 | Initial (non-public) release
 # --- END PLUGIN HELP ---
 -->
 <?php

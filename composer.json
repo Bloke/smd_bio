@@ -1,0 +1,16 @@
+{
+  "name": "bloke/smd_bio",
+  "description": "Customisable user biographies / profiles within Textpattern CMS",
+  "keywords": ["textpattern", "plugin", "users", "biography", "bio", "profile", "custom fields"],
+  "homepage": "https://github.com/bloke/smd_bio",
+  "license": "GPL-2.0",
+  "type": "textpattern-plugin",
+  "support": {
+    "issues": "https://github.com/bloke/smd_bio/issues",
+    "source": "https://github.com/bloke/smd_bio"
+  },
+  "require": {
+    "textpattern/lock": ">=4.7.0",
+    "textpattern/installer": "*"
+  }
+}
