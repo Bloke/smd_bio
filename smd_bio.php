@@ -2380,7 +2380,7 @@ Visit the _Extensions->Bio config_ tab. Add bio fields such as cell/work/fax num
 : Note that some types of biographical information (e.g. images) are forced to be of a certain column type
 : IMPORTANT: if you alter this after it has been created, any existing bio data in the field will be altered to suit and *you may lose information*. Please backup first
 ; *Column size* (click 'More' to toggle)
-: Some column types -- most notably the varchar types -- require a column width (or display width) to be specified. Put a value here if you wish to use a size other than the default. If you don't know what this is, just accept the default
+: Some column types (most notably the varchar types) require a column width (or display width) to be specified. Put a value here if you wish to use a size other than the default. If you don't know what this is, just accept the default
 : Note that most column types do not require a size so if you do specify one it will be ignored
 : IMPORTANT: if you alter this after it has been created, any existing bio data in the field will be altered to suit and *you may lose information*. Please backup first
 ; *Size*
@@ -2476,7 +2476,7 @@ When you create a new _field_ in the "Bio Config":#smd_bio_config pane, it has v
 Each field has a variety of pieces of data that you may display. These are known as @items@ and the primary ones are:
 
 # @value@ : the current value of the field that has been selected / typed by the user in their profile.
-# @title@ : the human friendly title (a.k.a. _label_) that you have assigned to your field in the Bio Config screen -- this is handy if you want to print out the title alongside the data value itself, e.g. Department: sales.
+# @title@ : the human friendly title (a.k.a. _label_) that you have assigned to your field in the Bio Config screen. This is handy if you want to print out the title alongside the data value itself, e.g. Department: sales.
 # @name@ : the field's key (shown in the 'Name' column on the Bio Config panel). This is of less everyday use, but when building your own input screens for capturing bio data, it becomes handy so you can tell mem_form the name of the field it needs to store the bio data item in.
 
 There are other items useful for displaying the field type, various counters, or for diving deeper into the available options in lists, radio sets, checkboxes, etc, but the most important concept is that a @field@ is your bio thingamybob (it's Name / Key), and an @item@ is the part of thingamybob you want to display: its value, title, name (a.k.a. key), type, default values, and so on.
@@ -2528,7 +2528,7 @@ Wrap this tag around @<txp:smd_bio_info>@ tags to display information from more 
 
 ; *author*
 : Comma-separated list of author login names from which you wish to display info.
-: If omitted, the current (individual article) author will be used -- functionally the same as if you just used @<txp:smd_bio_info />@ without the author wrapper tag.
+: If omitted, the current (individual article) author will be used. Functionally the same as if you just used @<txp:smd_bio_info />@ without the author wrapper tag.
 : You may specify any of your comma-separated entries as @SMD_PRIVS:@ and then colon-separate the priv numbers. Any users with those matching level(s) will be displayed.
 : You may also use @SMD_ALL@ to return all defined authors.
 ; *sort*
@@ -2628,13 +2628,13 @@ If you have elected to extract a list item such as radio, list or checkbox you w
 Further, if you are displaying just a single @field@, these replacements (backwards compatible with smd_bio v0.3x) are present:
 
 ; @{smd_bio_info_item}@
-: The value of the current field -- Deprecated: use @{smd_bio_info_value}@ instead.
+: The value of the current field. Deprecated: use @{smd_bio_info_value}@ instead.
 ; @{smd_bio_info_name}@
 : The sanitized name of the column corresponding to the field.
 ; @{smd_bio_info_title}@
 :  The human-friendly title you assigned the field.
 ; @{smd_bio_info_itemclass}@
-: The name of this field's class -- Deprecated: use @{smd_bio_info_class}@ instead.
+: The name of this field's class. Deprecated: use @{smd_bio_info_class}@ instead.
 
 h2(#smd_if_bio). Tag: @<txp:smd_if_bio>@
 
