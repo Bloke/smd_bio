@@ -17,9 +17,9 @@ $plugin['name'] = 'smd_bio';
 // 1 = Plugin help is in raw HTML.  Not recommended.
 # $plugin['allow_html_help'] = 1;
 
-$plugin['version'] = '0.50';
+$plugin['version'] = '0.5.0';
 $plugin['author'] = 'Stef Dawson';
-$plugin['author_uri'] = 'http://stefdawson.com/';
+$plugin['author_uri'] = 'https://stefdawson.com/';
 $plugin['description'] = 'Customisable user biographies / profile info.';
 
 // Plugin load order:
@@ -55,8 +55,10 @@ $plugin['flags'] = '2';
 // abc_string_name => Localized String
 
 $plugin['textpack'] = <<<EOT
-#@smd_bio
+#@language en, en-gb, en-us
+#@admin-side
 smd_bio_admin_tab => Bio config
+#@smd_bio
 smd_bio_colsize => Column size
 smd_bio_coltype => Column type
 smd_bio_help => ?
@@ -101,7 +103,7 @@ if (!defined('txpinterface'))
  *  -> Allow people to manage their own profiles via smd_user_manager
  *
  * @author Stef Dawson
- * @link   http://stefdawson.com/
+ * @link   https://stefdawson.com/
  *
  * @todo Stop smd_bio_iterate from trashing the bio data for future fields of the same name.
  * @todo Attempt table repair if bio/bio_meta get out of sync.
@@ -110,6 +112,7 @@ if (!defined('txpinterface'))
  */
 if (txpinterface === 'admin') {
     add_privs('smd_bio', '1');
+
     register_tab('extensions', 'smd_bio', gTxt('smd_bio_admin_tab'));
     register_callback('smd_bio_dispatcher', 'smd_bio');
     register_callback('smd_bio_fields', 'author_ui', 'extend_detail_form');
@@ -2355,7 +2358,7 @@ h2. Installation / Uninstallation
 
 p(important). Requires Textpattern 4.5+
 
-Download the plugin from either "textpattern.org":http://textpattern.org/plugins/1116/smd_bio, or the "software page":http://stefdawson.com/sw, paste the code into the Textpattern _Admin->Plugins_ pane, install and enable the plugin. The plugin's tables will be installed automatically. Visit the "forum thread":http://forum.textpattern.com/viewtopic.php?id=31496 for more info or to report on the success or otherwise of the plugin.
+Download the plugin from either "textpattern.org":https://textpattern.org/plugins/1116/smd_bio, or the "software page":https://stefdawson.com/sw, paste the code into the Textpattern _Admin->Plugins_ pane, install and enable the plugin. The plugin's tables will be installed automatically. Visit the "forum thread":https://forum.textpattern.com/viewtopic.php?id=31496 for more info or to report on the success or otherwise of the plugin.
 
 When you visit the _Extensions->Bio config_ page, the plugin's tables will be checked and installed/upgraded automatically if not present already. This is a convenience for people who run the plugin from the cache directory.
 
@@ -2694,7 +2697,7 @@ See the "smd_bio_data":#smd_bio_data tag for details of what you can display / t
 
 h2(#smd_bio_articles). Tag: @<txp:smd_bio_articles>@
 
-A simple convenience wrapper for @<txp:article_custom />@ that sets the @author@ attribute to the person who wrote the current article. If you specify an author, that person will be used instead. In all other regards, the tag functions identically to "article_custom":http://textpattern.net/wiki/index.php?title=article_custom and can be used as a container if you wish.
+A simple convenience wrapper for @<txp:article_custom />@ that sets the @author@ attribute to the person who wrote the current article. If you specify an author, that person will be used instead. In all other regards, the tag functions identically to "article_custom":https://textpattern.net/wiki/index.php?title=article_custom and can be used as a container if you wish.
 
 p(important). IMPORTANT: take care when using this tag inside your default form. If you do not specify your own container or a dedicated @form@, you will receive a _circular reference error_ from Textpattern as it tries to call the default form, which calls the default form, which calls the default form...
 
@@ -2813,7 +2816,7 @@ bc.. <txp:mem_form type="smd_bio">
 
 h2. Author / Credits
 
-"Stef Dawson":http://stefdawson.com/contact. The plugin is a logical extension of pvc_users_info by Peter V. Cook (the smd_bio_articles tag is essentially the same as pvc_author_articles). Thanks also to pieman for setting the wheels in motion and net-carver for his inimitable knack of making things better.
+"Stef Dawson":https://stefdawson.com/contact. The plugin is a logical extension of pvc_users_info by Peter V. Cook (the smd_bio_articles tag is essentially the same as pvc_author_articles). Thanks also to pieman for setting the wheels in motion and net-carver for his inimitable knack of making things better.
 
 h2. Changelog
 
