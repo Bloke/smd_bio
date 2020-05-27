@@ -17,7 +17,7 @@ $plugin['name'] = 'smd_bio';
 // 1 = Plugin help is in raw HTML.  Not recommended.
 # $plugin['allow_html_help'] = 1;
 
-$plugin['version'] = '0.5.0';
+$plugin['version'] = '0.5.1';
 $plugin['author'] = 'Stef Dawson';
 $plugin['author_uri'] = 'https://stefdawson.com/';
 $plugin['description'] = 'Customisable user biographies / profiles.';
@@ -1178,11 +1178,13 @@ function smd_bio_save($evt, $stp) {
     if (smd_bio_table_exist()) {
         $targetvars = array();
         extract(doSlash(psa(array('privs', 'name', 'email', 'RealName', 'user_id'))));
+
         if (get_pref('smd_bio_sanitize_name', 0) > 0) {
-            // Sanitize and pass the new name forward to the actual txp_user save routine
+            // Sanitize and pass the new name forward to the actual txp_user save routine.
             $name = strtolower(sanitizeForUrl($name));
             $_POST['name'] = $name;
         }
+
         $length = function_exists('mb_strlen') ? mb_strlen($name, '8bit') : strlen($name);
 
         if (($user_id || $name) and $length <= 64 and is_valid_email($email)) {
@@ -1194,20 +1196,32 @@ function smd_bio_save($evt, $stp) {
 
             // Double de-clutch again... dammit :-(
             $user_id = gps('user_id');
+
             if ($user_id) {
-                $user_ref = safe_field('name','txp_users',"user_id = '$user_id'");
+                $user_ref = safe_field('name', 'txp_users', "user_id = '$user_id'");
             } else {
                 $user_ref = $name;
             }
+
             extract(gpsa($targetvars));
-            $bcols = getThings('describe `'.PFX.SMD_BIO.'`');
+            $bcols = getRows('describe `'.PFX.SMD_BIO.'`');
             $sqlSet = array();
+            $biocols = array();
+
+            foreach ($bcols as $a) {
+                $biocols[$a['Field']] = $a['Type'];
+            }
+
             foreach ($targetvars as $var) {
                 $colname = str_replace('smd_bio_', '', $var);
-                if (in_array($colname, $bcols)) {
-                    $sqlSet[] = "`$colname` = '".doSlash($$var)."'";
+
+                if (array_key_exists($colname, $biocols)) {
+                    $isNumber = (strpos($biocols[$colname], 'int') === 0);
+                    $newVal = ($isNumber) ? intval($$var) : $$var;
+                    $sqlSet[] = "`$colname` = '".doSlash($newVal)."'";
                 }
             }
+
             if ($sqlSet) {
                 $rs = safe_upsert(SMD_BIO, join(',', $sqlSet), "`user_ref` = '".doSlash($user_ref)."'");
             }
