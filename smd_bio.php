@@ -109,6 +109,8 @@ if (!defined('txpinterface'))
  * @todo Attempt table repair if bio/bio_meta get out of sync.
  * @todo Ability to specify wildcards/matches for fields/authors in the client tag.
  * @todo Specify tooltip extended bio information in prefs (cf. what to do about touch devices).
+ * @todo Consider a 'family' group column to subdivide fields on the User Edit panel (i18n title?).
+ * @todo Migrate any good stuff from this plugin to Unlimited Custom Fields branch. It'll become obsolete then.
  */
 use \Textpattern\Search\Filter;
 
@@ -870,7 +872,7 @@ class smd_bio
                 switch($widget['type']) {
                     case 'list':
                         $selv = smd_bio_splitval($widget['val']);
-                        list($selv, $dflt) = $this->get_default($selv, $val);
+                        list($selv, $dflt) = smd_bio_get_default($selv, $val);
                         $out[] = inputLabel(
                             $name,
                             selectInput($name, $selv, $dflt, false, '', $name),
@@ -882,7 +884,7 @@ class smd_bio
                     case 'multilist':
                         $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : '';
                         $selv = smd_bio_splitval($widget['val']);
-                        list($selv, $dflt) = $this->get_default($selv, $val);
+                        list($selv, $dflt) = smd_bio_get_default($selv, $val);
                         $use_val = (isset($vals[$widget['name']]) && ($vals[$widget['name']] !== '' || $vals[$widget['name']] !== null)) ? $val : $dflt; // Don't use defaults if this field has been previously saved
                         $selectedVals = do_list($use_val);
                         $items = array();
@@ -902,7 +904,7 @@ class smd_bio
                         break;
                     case 'radio':
                         $selv = smd_bio_splitval($widget['val']);
-                        list($selv, $dflt) = $this->get_default($selv, $val);
+                        list($selv, $dflt) = smd_bio_get_default($selv, $val);
                         $out[] = inputLabel(
                             $name,
                             radioSet($selv, $name, $dflt),
@@ -923,7 +925,7 @@ class smd_bio
                     case 'checkbox':
                         $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : '';
                         $selv = smd_bio_splitval($widget['val']);
-                        list($selv, $dflt) = $this->get_default($selv, $val);
+                        list($selv, $dflt) = smd_bio_get_default($selv, $val);
                         $use_val = (isset($vals[$widget['name']]) && ($vals[$widget['name']] !== '' || $vals[$widget['name']] !== null)) ? $val : $dflt; // Don't use defaults if this field has been previously saved
                         $checkedVals = do_list($use_val);
                         $items = array();
@@ -993,7 +995,7 @@ class smd_bio
                         $size1 = ($size1 == '' || $size1 == 0) ? 25 : $size1;
                         $size2 = ($size2 == '' || $size2 == 0) ? $size1 : $size2;
                         $selv = smd_bio_splitval($widget['val']);
-                        list($selv, $dflt) = $this->get_default($selv, $val);
+                        list($selv, $dflt) = smd_bio_get_default($selv, $val);
                         $use_val = (isset($vals[$widget['name']]) && ($vals[$widget['name']] !== '' || $vals[$widget['name']] !== null)) ? $val : $dflt; // Don't use defaults if this field has been previously saved
 
                         $out[] = inputLabel(
@@ -1009,46 +1011,6 @@ class smd_bio
         }
 
         return join('', $out);
-    }
-
-    /**
-     * Read a name/val array and remove any [*] marker which indicates a default item.
-     */
-    public function get_default($list, $curr)
-    {
-        $out = array();
-        $dflt = '';
-        $new_dflt = array();
-
-        foreach ($list as $item => $value) {
-            if ($item === 'SMD_BIO_FN') {
-                $out[$item] = $value;
-/*
-                $params = do_list($value, '|');
-                $fn = array_shift($params);
-                $fnbits = do_list($fn, '::');
-                $fncall = (isset($fnbits[1])) ? array($fnbits[0], $fnbits[1]) : $fnbits[0];
-                $dflt = call_user_func_array($fncall, $params);
-*/
-            } else {
-                $value = str_replace('&#44;', ',', $value); // Revert encoded commas to real literals @see $this->make_list
-
-                if (($pos = strpos($value, '[*]')) !== false) {
-                    $out[$item] = substr($value, 0, $pos);
-                    $new_dflt[] = $item;
-                } else {
-                    $out[$item] = $value;
-                }
-
-                if ($item == $curr) {
-                    $dflt = $item;
-                }
-            }
-        }
-
-        $dflt = ($dflt) ? $dflt : join(',', $new_dflt);
-
-        return array($out, $dflt);
     }
 
     // ------------------------
@@ -1921,6 +1883,46 @@ function smd_bio_find_author($author_in='', $places=array('biotag', 'txpuser', '
 }
 
 /**
+ * Read a name/val array and remove any [*] marker which indicates a default item.
+ */
+function smd_bio_get_default($list, $curr)
+{
+    $out = array();
+    $dflt = '';
+    $new_dflt = array();
+
+    foreach ($list as $item => $value) {
+        if ($item === 'SMD_BIO_FN') {
+            $out[$item] = $value;
+/*
+            $params = do_list($value, '|');
+            $fn = array_shift($params);
+            $fnbits = do_list($fn, '::');
+            $fncall = (isset($fnbits[1])) ? array($fnbits[0], $fnbits[1]) : $fnbits[0];
+            $dflt = call_user_func_array($fncall, $params);
+*/
+        } else {
+            $value = str_replace('&#44;', ',', $value); // Revert encoded commas to real literals @see $this->make_list
+
+            if (($pos = strpos($value, '[*]')) !== false) {
+                $out[$item] = substr($value, 0, $pos);
+                $new_dflt[] = $item;
+            } else {
+                $out[$item] = $value;
+            }
+
+            if ($item == $curr) {
+                $dflt = $item;
+            }
+        }
+    }
+
+    $dflt = ($dflt) ? $dflt : join(',', $new_dflt);
+
+    return array($out, $dflt);
+}
+
+/**
  * Fetch available widget types.
  *
  * In alphabetical order or sorting on the admin panel gets screwy.
@@ -2115,14 +2117,17 @@ function smd_bio_author($atts, $thing = null)
     if ($sort != '') {
         $sort = do_list($sort);
         $sortout = array();
+
         foreach ($sort as $sitems) {
             $sortbits = do_list($sitems, ' ');
             $sort_col = $sortbits[0];
             $sort_ord = (isset($sortbits[1]) && in_array($sortbits[1], array('asc', 'desc'))) ? $sortbits[1] : 'asc';
+
             if ($sort_col) {
                 $sortout[] = '`' . $sort_col . '` ' . $sort_ord;
             }
         }
+
         if ($sortout) {
             $sort = ' ORDER BY '.join(',', $sortout);
         }
@@ -2134,6 +2139,7 @@ function smd_bio_author($atts, $thing = null)
             $aprivs = explode(':', $user);
             array_shift($aprivs); // Remove smd_privs token from the array
             $rows = safe_query('SELECT txpu.name FROM ' . PFX . 'txp_users AS txpu LEFT JOIN ' . PFX.SMD_BIO . ' AS smdb ON txpu.name = smdb.user_ref WHERE privs in (' . doQuote(join("','", $aprivs)) . ')'.$sort);
+
             if ($rows) {
                 while ($a = nextRow($rows)) {
                     $authors[] = $a['name'];
@@ -2154,6 +2160,7 @@ function smd_bio_author($atts, $thing = null)
     // Parse content for each author: inject current author into global
     $out = array();
     $author_count = count($authors) - 1;
+
     foreach ($authors as $idx => $smd_bio_author) {
         $smd_bio_meta_data['author']['first'] = ($idx === 0);
         $smd_bio_meta_data['author']['last'] = ($idx === $author_count);
@@ -2240,7 +2247,7 @@ function smd_bio_info($atts, $thing = null)
         $metacols = (empty($metacols)) ? safe_column('name', SMD_BIO_META, '1=1') : $metacols;
         $num = count($meta);
 
-        foreach($cmeta as $info) {
+        foreach ($cmeta as $info) {
             if (!in_array($info['Field'], $coreCols)) continue;
             $meta[$num]['name'] = $info['Field'];
             $tField = join('', array_keys($coreCols, $info['Field']));
@@ -2337,7 +2344,7 @@ function smd_bio_info($atts, $thing = null)
                     if (in_array($meta[$idx]['type'], $list_types)) {
                         $chosens = do_list($field);
                         $nv = smd_bio_splitval($meta[$idx]['val']);
-                        list($nv, $dflt) = $this->get_default($nv, $field);
+                        list($nv, $dflt) = smd_bio_get_default($nv, $field);
                         $dflts = do_list($dflt);
                         $listctr=1;
                         $chosenctr=0;
