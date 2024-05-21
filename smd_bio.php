@@ -17,7 +17,7 @@ $plugin['name'] = 'smd_bio';
 // 1 = Plugin help is in raw HTML.  Not recommended.
 # $plugin['allow_html_help'] = 1;
 
-$plugin['version'] = '0.5.1';
+$plugin['version'] = '0.6.0';
 $plugin['author'] = 'Stef Dawson';
 $plugin['author_uri'] = 'https://stefdawson.com/';
 $plugin['description'] = 'Customisable user biographies / profiles.';
@@ -110,51 +110,7 @@ if (!defined('txpinterface'))
  * @todo Ability to specify wildcards/matches for fields/authors in the client tag.
  * @todo Specify tooltip extended bio information in prefs (cf. what to do about touch devices).
  */
-if (txpinterface === 'admin') {
-    add_privs('smd_bio', '1');
-
-    register_tab('extensions', 'smd_bio', gTxt('smd_bio_admin_tab'));
-    register_callback('smd_bio_dispatcher', 'smd_bio');
-    register_callback('smd_bio_fields', 'author_ui', 'extend_detail_form');
-    register_callback('smd_bio_admin_js', 'admin_side', 'head_end');
-
-    // Note these are all pre Txp's involvement
-    register_callback('smd_bio_save', 'admin', 'author_save', 1);
-    register_callback('smd_bio_save', 'admin', 'author_save_new', 1);
-    register_callback('smd_bio_delete', 'admin', 'admin_multi_edit', 1);
-    register_callback('smd_bio_welcome', 'plugin_lifecycle.smd_bio');
-
-    // Doesn't hurt much to add these if the plugin's not installed.
-    // Since plugins are loaded in load_order and then alphabetical,
-    // at this point smd_user_manager doesn't 'exist' (b < u)
-    register_callback('smd_bio_save', 'smd_um', 'smd_um_save', 1);
-    register_callback('smd_bio_save', 'smd_um', 'smd_um_save_new', 1);
-    register_callback('smd_bio_delete', 'smd_um', 'smd_um_multi_edit', 1);
-} elseif (txpinterface === 'public') {
-    if (class_exists('\Textpattern\Tag\Registry')) {
-        Txp::get('\Textpattern\Tag\Registry')
-            ->register('smd_bio_author')
-            ->register('smd_bio_info')
-            ->register('smd_bio_data')
-            ->register('smd_bio_iterate')
-            ->register('smd_bio_articles')
-            ->register('smd_if_bio')
-            ->register('smd_if_bio_is')
-            ->register('smd_if_bio_first_author')
-            ->register('smd_if_bio_last_author');
-    }
-}
-
-register_callback('smd_bio_form_submit', 'mem_form.submit');
-
-// Intercept image and extended bio display on Admin->Users panel
-$smd_bio_step = gps('smd_bio_step');
-if ($smd_bio_step == 'smd_bio_get_image') {
-    smd_bio_get_image();
-}
-if ($smd_bio_step == 'smd_bio_get_ebio') {
-    smd_bio_get_ebio();
-}
+use \Textpattern\Search\Filter;
 
 if (!defined('SMD_BIO')) {
     define("SMD_BIO", 'smd_bio');
@@ -163,371 +119,465 @@ if (!defined('SMD_BIO_META')) {
     define("SMD_BIO_META", 'smd_bio_meta');
 }
 
-// -------------------------------------------------------------
-function smd_bio_get_styles() {
-    $smd_bio_styles = array(
-        'meta' =>
-         '.smd_bio_toggler { display:none; }',
-        'tooltip' =>
-         '#tooltip { position:absolute; border:1px solid #333; background:#f7f5d1; padding:10px 15px; opacity:.9; color:#333; display:none; max-width:60%; }',
-    );
-    return $smd_bio_styles;
+if (txpinterface === 'admin') {
+    new smd_bio();
 }
 
-// -------------------------------------------------------------
-// Install/uninstall jumpoff point
-function smd_bio_welcome($evt, $stp) {
-    $msg = '';
-    switch ($stp) {
-        case 'installed':
-            smd_bio_table_install(0);
-            $msg = 'Pimp your users';
-            break;
-        case 'deleted':
-            smd_bio_table_remove(0);
-            break;
-    }
-    return $msg;
+// Regsiter tags (front- and back-end, for dashboards).
+if (class_exists('\Textpattern\Tag\Registry')) {
+    Txp::get('\Textpattern\Tag\Registry')
+        ->register('smd_bio_author')
+        ->register('smd_bio_info')
+        ->register('smd_bio_data')
+        ->register('smd_bio_iterate')
+        ->register('smd_bio_articles')
+        ->register('smd_if_bio')
+        ->register('smd_if_bio_is')
+        ->register('smd_if_bio_first_author')
+        ->register('smd_if_bio_last_author');
 }
 
-// ************************
-// BIO CONFIGURATION
-// ------------------------
-function smd_bio_dispatcher($evt, $stp) {
-    $available_steps = array(
-        'smd_bio_config'          => false,
-        'smd_bio_table_install'   => false,
-        'smd_bio_table_remove'    => false,
-        'smd_bio_meta_add'        => true,
-        'smd_bio_multi_edit'      => true,
-        'smd_bio_meta_save'       => true,
-        'smd_bio_save_pane_state' => true,
-    );
+register_callback('smd_bio_form_submit', 'mem_form.submit');
 
-    if (!$stp or !bouncer($stp, $available_steps)) {
-        $stp = 'smd_bio_config';
+/**
+ * Bio config admin interface.
+ */
+class smd_bio
+{
+    /**
+     * The plugin's event as registered in Txp.
+     *
+     * @var string
+     */
+    protected $event = 'smd_bio';
+
+    /**
+     * The plugin's version.
+     *
+     * @var string
+     */
+    protected $version = '0.6.0';
+
+    /**
+     * The plugin's privileges.
+     *
+     * @var string
+     */
+    protected $privs = '1';
+
+    /**
+     * Any UI message to announce.
+     *
+     * @var string
+     */
+    protected $message = '';
+
+    /**
+     * List of columns, in position order.
+     *
+     * @var array
+     */
+    protected $columns = array();
+
+    /**
+     * Constructor to set up callbacks and environment.
+     */
+    public function __construct()
+    {
+        global $event;
+
+        add_privs($this->event, $this->privs);
+        register_tab('extensions', $this->event, gTxt('smd_bio_admin_tab'));
+
+        register_callback(array($this, 'steps'), 'user', 'steps');
+        register_callback(array($this, 'dispatcher'), $this->event);
+        register_callback(array($this, 'bio_fields'), 'author_ui', 'extend_detail_form');
+        register_callback(array($this, 'admin_js'), 'admin_side', 'head_end');
+
+        register_callback(array($this, 'welcome'), 'plugin_lifecycle.smd_bio');
+        register_callback(array($this, 'searchMethods'), 'search_criteria', 'admin');
+        register_callback(array($this, 'listHandler'), 'user', null, 'list');
+        register_callback(array($this, 'listRow'), 'user_ui', 'list.row');
+
+        // Note these are all pre Txp's involvement.
+        register_callback(array($this, 'bio_save'), 'admin', 'author_save', 1);
+        register_callback(array($this, 'bio_save'), 'admin', 'author_save_new', 1);
+        register_callback(array($this, 'bio_delete'), 'admin', 'admin_multi_edit', 1);
+        register_callback(array($this, 'get_image'), 'admin', 'smd_bio_get_image', 1);
+        register_callback(array($this, 'get_ebio'), 'admin', 'smd_bio_get_ebio', 1);
+
+        // Call the installer in case the lifecycle event didn't fire.
+        $this->install();
     }
-    $stp();
-}
 
-// ------------------------
-// The Extensions->Bio config panel, made up of two areas: the edit pane and the list pane
-function smd_bio_config($msg='') {
-    smd_bio_table_install(0);
+    /**
+     * [get_styles description]
+     * @return [type] [description]
+     */
+    protected function get_styles()
+    {
+        $smd_bio_styles = array(
+            'meta' =>
+                 '.smd_bio_toggler { display:none; }',
+            'tooltip' =>
+                 '#tooltip { position:absolute; border:1px solid #333; background:#f7f5d1; padding:10px 15px; opacity:.9; color:#333; display:none; max-width:60%; }',
+        );
 
-    pagetop(gTxt('smd_bio_admin_tab'), $msg);
-
-    echo n.'<div id="smd_bio_container" class="txp-container">'.
-        n.smd_bio_meta_edit().
-        n.smd_bio_meta_list().
-        n.'</div>';
-}
-
-// ------------------------
-function smd_bio_meta_edit() {
-    $smd_bio_types = smd_bio_get_types();
-    $smd_bio_coltypes = smd_bio_get_coltypes();
-
-    $vars = array('step', 'id', 'title', 'name', 'type', 'coltype', 'colsize', 'size', 'val', 'position');
-    $rs = array();
-
-    extract(gpsa($vars));
-    $colsize = (int)$colsize;
-
-    if ($id && $step == 'meta_edit') {
-        $id = assert_int($id);
-        $rs = safe_row('*', SMD_BIO_META, "id = $id");
-        extract($rs);
+        return $smd_bio_styles;
     }
 
-    if ($step == 'smd_bio_meta_save' || $step == 'smd_bio_meta_add' || $step == 'smd_bio_multi_edit') {
-        foreach ($vars as $var) {
-            $$var = '';
-        }
-    }
-
-    $caption = gTxt(($step == 'meta_edit') ? 'smd_bio_meta_edit' : 'smd_bio_meta_add');
-
-    // Make the name/val pairs for the type selectInput
-    $selv = array();
-    foreach ($smd_bio_types as $widx => $wval) {
-        $selv[$widx] = $wval['name'];
-    }
-
-    // Make the name/val pairs for the coltype selectInput
-    foreach($smd_bio_coltypes as $ctype => $cdata) {
-        $coltypes[$ctype] = $cdata['title'];
-    }
-
-    $toggleState = get_pref('pane_smd_bio_coltype_visible') ? true : false;
-
-    return hed($caption, 1, ' class="txp-heading"').
-        form(
-            '<div class="txp-edit">'.
-            inputLabel('name', ($id && $step == 'meta_edit' ? strong($name) : fInput('text', 'name', $name, '', '', '', '', '', 'name')), 'name').
-            inputLabel('title', fInput('text', 'title', $title, '', '', '', '', '', 'title'), 'title').
-            inputLabel('smd_bio_widget_type', selectInput('type', $selv, $type, false, '', 'smd_bio_widget_type') .sp. '<a id="smd_bio_colgroup" class="txp-summary lever'.(($toggleState) ? ' expanded' : '').'" href="#">'.gTxt('smd_bio_more').'</a>', 'type').
-            inputLabel('smd_bio_coltype', selectInput('coltype', $coltypes, $coltype, false, '', 'smd_bio_coltype'), 'smd_bio_coltype', '', 'txp-form-field smd_bio_coltype '.(($toggleState) ? '' : ' smd_bio_toggler')).
-            inputLabel('smd_bio_colsize', fInput('number', 'colsize', $colsize, '', '', '', '', '', 'smd_bio_colsize'), 'smd_bio_colsize', '', 'txp-form-field smd_bio_coltype '.(($toggleState) ? '' : ' smd_bio_toggler')).
-            inputLabel('smd_bio_size', fInput('text', 'size', $size, '', '', '', '', '', 'smd_bio_size'), 'smd_bio_size', 'smd_bio_size').
-            inputLabel('smd_bio_value', text_area('val', '100', '300', $val, 'smd_bio_value'), 'smd_bio_value', 'smd_bio_val').
-            inputLabel('smd_bio_position', fInput('text', 'position', $position, '', '', '', '', '', 'smd_bio_position'), 'smd_bio_position').
-            graf(
-                fInput('submit', 'save', gTxt('save'), 'publish'),
-                array('class' => 'txp-edit-actions')
-            ).
-
-            eInput('smd_bio').
-            ($id ? hInput('id', $id).hInput('name', $name).sInput('smd_bio_meta_save') : sInput('smd_bio_meta_add')).
-            tag(' ', 'span', ' id="smd_bio_size_help_text" title="'.gTxt('smd_bio_sizehelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_number" title="'.gTxt('smd_bio_sizehelp_numrange').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_range" title="'.gTxt('smd_bio_sizehelp_numrange').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_list" title="'.gTxt('smd_bio_help_unused').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_multilist" title="'.gTxt('smd_bio_help_unused').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_radio" title="'.gTxt('smd_bio_help_unused').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_yesnoradio" title="'.gTxt('smd_bio_help_unused').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_checkbox" title="'.gTxt('smd_bio_help_unused').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_textarea" title="'.gTxt('smd_bio_sizehelp_textarea').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_image" title="'.gTxt('smd_bio_sizehelp_image').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_email" title="'.gTxt('smd_bio_sizehelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_url" title="'.gTxt('smd_bio_sizehelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_datetime" title="'.gTxt('smd_bio_sizehelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_date" title="'.gTxt('smd_bio_sizehelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_month" title="'.gTxt('smd_bio_sizehelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_week" title="'.gTxt('smd_bio_sizehelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_size_help_time" title="'.gTxt('smd_bio_sizehelp_text').'"').
-
-            tag(' ', 'span', ' id="smd_bio_val_help_text" title="'.gTxt('smd_bio_valhelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_number" title="'.gTxt('smd_bio_valhelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_range" title="'.gTxt('smd_bio_valhelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_list" title="'.gTxt('smd_bio_valhelp_lrc').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_multilist" title="'.gTxt('smd_bio_valhelp_lrc').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_radio" title="'.gTxt('smd_bio_valhelp_lrc').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_yesnoradio" title="'.gTxt('smd_bio_valhelp_ynr').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_checkbox" title="'.gTxt('smd_bio_valhelp_lrc').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_textarea" title="'.gTxt('smd_bio_valhelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_image" title="'.gTxt('smd_bio_valhelp_image').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_email" title="'.gTxt('smd_bio_valhelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_url" title="'.gTxt('smd_bio_valhelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_datetime" title="'.gTxt('smd_bio_valhelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_date" title="'.gTxt('smd_bio_valhelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_month" title="'.gTxt('smd_bio_valhelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_week" title="'.gTxt('smd_bio_valhelp_text').'"').
-            tag(' ', 'span', ' id="smd_bio_val_help_time" title="'.gTxt('smd_bio_valhelp_text').'"').
-        '</div>'
-    );
-}
-
-// ------------------------
-function smd_bio_meta_list() {
-
-    $smd_bio_types = smd_bio_get_types();
-
-    extract(gpsa(array('sort', 'dir', 'crit', 'search_method')));
-    if ($sort === '') $sort = get_pref('smd_bio_meta_sort_column', 'name');
-    if ($dir === '') $dir = get_pref('smd_bio_meta_sort_dir', 'asc');
-    $dir = ($dir == 'desc') ? 'desc' : 'asc';
-
-    if (!in_array($sort, array('name', 'title', 'type', 'size', 'val', 'position'))) $sort = 'position';
-
-    $sort_sql   = $sort.' '.$dir;
-
-    set_pref('smd_bio_meta_sort_column', $sort, 'smd_bio', 2, '', 0, PREF_PRIVATE);
-    set_pref('smd_bio_meta_sort_dir', $dir, 'smd_bio', 2, '', 0, PREF_PRIVATE);
-
-    $switch_dir = ($dir == 'desc') ? 'asc' : 'desc';
-
-    $rs = safe_rows_start('*', SMD_BIO_META, '1=1 ORDER BY '.$sort_sql);
-    $out = array();
-
-    if ($rs) {
-        $out[] =
-        n. '<form id="smd_bio_form" action="index.php" method="post" name="longform" class="multi_edit_form">'.
-
-        n.'<div class="txp-listtables">'.
-        startTable('', '', 'txp-list').
-        n.'<thead>'.
-        tr(
-            hCell(fInput('checkbox', 'select_all', 0, '', '', '', '', '', 'select_all'), '', ' scope="col" title="'.gTxt('toggle_all_selected').'" class="txp-list-col-multi-edit"').
-            column_head('name', 'name', 'smd_bio', true, $switch_dir, '', '', ('name' == $sort) ? $dir : '').
-            column_head('title', 'title', 'smd_bio', true, $switch_dir, '', '', ('title' == $sort) ? $dir : '').
-            column_head('type', 'type', 'smd_bio', true, $switch_dir, '', '', ('type' == $sort) ? $dir : '').
-            column_head(gTxt('smd_bio_size'), 'size', 'smd_bio', true, $switch_dir, '', '', ('size' == $sort) ? $dir : '').
-            column_head('value', 'val', 'smd_bio', true, $switch_dir, '', '', ('val' == $sort) ? $dir : '').
-            column_head(gTxt('smd_bio_position'), 'position', 'smd_bio', true, $switch_dir, '', '', ('position' == $sort) ? $dir : '')
-        ).
-        n.'</thead>'.
-        n.'<tbody>';
-
-        while ($a = nextRow($rs)) {
-            extract(doSpecial($a));
-
-            $out[] = tr(
-                td(fInput('checkbox', 'selected[]', $name), '', 'txp-list-col-multi-edit').
-                td(eLink('smd_bio', 'meta_edit', 'id', $id, $name)).
-                td($title).
-                td($smd_bio_types[$type]['name']).
-                td($size).
-                td($val).
-                td($position)
+    /**
+     * Register the plugin's steps with the core Users panel.
+     *
+     * @param  string $evt           Textpattern event (panel)
+     * @param  string $stp           Textpattern step (action)
+     * @param  array  &$plugin_steps Current set of steps to be modified
+     */
+    public function steps($evt, $stp, &$plugin_steps)
+    {
+        if (has_privs('admin.edit')) {
+            $plugin_steps += array(
+                'smd_bio_get_image' => true,
+                'smd_bio_get_ebio'  => true,
             );
         }
-
-        $out[] = '</tbody>'.
-            endTable().
-            n.'</div>'.
-            smd_bio_multiedit_form('', $sort, $dir, $crit, $search_method).
-            tInput().
-            '</form>';
     }
-    return join(n, $out);
-}
 
-// ------------------------
-function smd_bio_multiedit_form($page, $sort, $dir, $crit, $search_method) {
-
-    $methods = array(
-        'delete' => gTxt('delete'),
-    );
-
-    return multi_edit($methods, 'smd_bio', 'smd_bio_multi_edit', $page, $sort, $dir, $crit, $search_method);
-}
-
-// ------------------------
-function smd_bio_multi_edit()
-{
-    $selected = ps('selected');
-
-    if (!$selected or !is_array($selected))
+    /**
+     * Lifecycle handling, post-install / delete.
+     *
+     * @param  string $evt Textpattern event (panel)
+     * @param  string $stp Textpattern step (action)
+     * @return string      Success/failure message
+     */
+    public function welcome($evt, $stp)
     {
+        $msg = '';
+
+        switch ($stp) {
+            case 'installed':
+                $this->install();
+                $msg = 'Pimp your users';
+                break;
+            case 'deleted':
+                $this->remove();
+                break;
+        }
+
+        return $msg;
+    }
+
+    // ************************
+    // BIO CONFIGURATION
+    // ------------------------
+    public function dispatcher($evt, $stp)
+    {
+        $available_steps = array(
+            'bio_config'          => false,
+            'bio_table_install'   => false,
+            'bio_table_remove'    => false,
+            'bio_meta_add'        => true,
+            'bio_multi_edit'      => true,
+            'bio_meta_save'       => true,
+            'save_pane_state'     => true,
+        );
+
+        if (!$stp or !bouncer($stp, $available_steps)) {
+            $stp = 'bio_config';
+        }
+
+        $this->$stp();
+    }
+
+    // ------------------------
+    // The Extensions->Bio config panel, made up of two areas: the edit pane and the list pane
+    public function bio_config($msg='')
+    {
+        $this->install();
+
+        pagetop(gTxt('smd_bio_admin_tab'), $msg);
+
+        echo n.'<div id="smd_bio_container" class="txp-container">'.
+            n.$this->meta_edit().
+            n.$this->meta_list().
+            n.'</div>';
+    }
+
+    /**
+     * [meta_edit description]
+     * @return [type] [description]
+     */
+    public function meta_edit()
+    {
+        $smd_bio_types = smd_bio_get_types();
+        $smd_bio_coltypes = $this->get_coltypes();
+
+        $vars = array('step', 'id', 'title', 'name', 'type', 'coltype', 'colsize', 'size', 'val', 'position');
+        $rs = array();
+
+        extract(gpsa($vars));
+        $colsize = (int)$colsize;
+
+        if ($id && $step == 'meta_edit') {
+            $id = assert_int($id);
+            $rs = safe_row('*', SMD_BIO_META, "id = $id");
+            extract($rs);
+        }
+
+        if ($step == 'bio_meta_save' || $step == 'bio_meta_add' || $step == 'bio_multi_edit') {
+            foreach ($vars as $var) {
+                $$var = '';
+            }
+        }
+
+        $caption = gTxt(($step == 'meta_edit') ? 'smd_bio_meta_edit' : 'smd_bio_meta_add');
+
+        // Make the name/val pairs for the type selectInput
+        $selv = array();
+        foreach ($smd_bio_types as $widx => $wval) {
+            $selv[$widx] = $wval['name'];
+        }
+
+        // Make the name/val pairs for the coltype selectInput
+        foreach($smd_bio_coltypes as $ctype => $cdata) {
+            $coltypes[$ctype] = $cdata['title'];
+        }
+
+        $toggleState = get_pref('pane_smd_bio_coltype_visible') ? true : false;
+
+        return hed($caption, 1, ' class="txp-heading"').
+            form(
+                '<div class="txp-edit">'.
+                inputLabel('name', ($id && $step == 'meta_edit' ? strong($name) : fInput('text', 'name', $name, '', '', '', '', '', 'name')), 'name').
+                inputLabel('title', fInput('text', 'title', $title, '', '', '', '', '', 'title'), 'title').
+                inputLabel('smd_bio_widget_type', selectInput('type', $selv, $type, false, '', 'smd_bio_widget_type') .sp. '<a id="smd_bio_colgroup" class="txp-summary lever'.(($toggleState) ? ' expanded' : '').'" href="#">'.gTxt('smd_bio_more').'</a>', 'type').
+                inputLabel('smd_bio_coltype', selectInput('coltype', $coltypes, $coltype, false, '', 'smd_bio_coltype'), 'smd_bio_coltype', '', 'txp-form-field smd_bio_coltype '.(($toggleState) ? '' : ' smd_bio_toggler')).
+                inputLabel('smd_bio_colsize', fInput('number', 'colsize', $colsize, '', '', '', '', '', 'smd_bio_colsize'), 'smd_bio_colsize', '', 'txp-form-field smd_bio_coltype '.(($toggleState) ? '' : ' smd_bio_toggler')).
+                inputLabel('smd_bio_size', fInput('text', 'size', $size, '', '', '', '', '', 'smd_bio_size'), 'smd_bio_size', 'smd_bio_size').
+                inputLabel('smd_bio_value', text_area('val', '100', '300', $val, 'smd_bio_value'), 'smd_bio_value', 'smd_bio_val').
+                inputLabel('smd_bio_position', fInput('text', 'position', $position, '', '', '', '', '', 'smd_bio_position'), 'smd_bio_position').
+                graf(
+                    fInput('submit', 'save', gTxt('save'), 'publish'),
+                    array('class' => 'txp-edit-actions')
+                ).
+
+                eInput('smd_bio').
+                ($id ? hInput('id', $id).hInput('name', $name).sInput('bio_meta_save') : sInput('bio_meta_add')).
+                tag(' ', 'span', ' id="smd_bio_size_help_text" title="'.gTxt('smd_bio_sizehelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_number" title="'.gTxt('smd_bio_sizehelp_numrange').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_range" title="'.gTxt('smd_bio_sizehelp_numrange').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_list" title="'.gTxt('smd_bio_help_unused').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_multilist" title="'.gTxt('smd_bio_help_unused').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_radio" title="'.gTxt('smd_bio_help_unused').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_yesnoradio" title="'.gTxt('smd_bio_help_unused').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_checkbox" title="'.gTxt('smd_bio_help_unused').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_textarea" title="'.gTxt('smd_bio_sizehelp_textarea').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_image" title="'.gTxt('smd_bio_sizehelp_image').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_email" title="'.gTxt('smd_bio_sizehelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_url" title="'.gTxt('smd_bio_sizehelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_datetime" title="'.gTxt('smd_bio_sizehelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_date" title="'.gTxt('smd_bio_sizehelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_month" title="'.gTxt('smd_bio_sizehelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_week" title="'.gTxt('smd_bio_sizehelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_size_help_time" title="'.gTxt('smd_bio_sizehelp_text').'"').
+
+                tag(' ', 'span', ' id="smd_bio_val_help_text" title="'.gTxt('smd_bio_valhelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_number" title="'.gTxt('smd_bio_valhelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_range" title="'.gTxt('smd_bio_valhelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_list" title="'.gTxt('smd_bio_valhelp_lrc').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_multilist" title="'.gTxt('smd_bio_valhelp_lrc').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_radio" title="'.gTxt('smd_bio_valhelp_lrc').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_yesnoradio" title="'.gTxt('smd_bio_valhelp_ynr').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_checkbox" title="'.gTxt('smd_bio_valhelp_lrc').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_textarea" title="'.gTxt('smd_bio_valhelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_image" title="'.gTxt('smd_bio_valhelp_image').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_email" title="'.gTxt('smd_bio_valhelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_url" title="'.gTxt('smd_bio_valhelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_datetime" title="'.gTxt('smd_bio_valhelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_date" title="'.gTxt('smd_bio_valhelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_month" title="'.gTxt('smd_bio_valhelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_week" title="'.gTxt('smd_bio_valhelp_text').'"').
+                tag(' ', 'span', ' id="smd_bio_val_help_time" title="'.gTxt('smd_bio_valhelp_text').'"').
+            '</div>'
+        );
+    }
+
+    /**
+     * [meta_list description]
+     * @return [type] [description]
+     */
+    function meta_list() {
+
+        $smd_bio_types = smd_bio_get_types();
+
+        extract(gpsa(array('sort', 'dir', 'crit', 'search_method')));
+        if ($sort === '') $sort = get_pref('smd_bio_meta_sort_column', 'name');
+        if ($dir === '') $dir = get_pref('smd_bio_meta_sort_dir', 'asc');
+        $dir = ($dir == 'desc') ? 'desc' : 'asc';
+
+        if (!in_array($sort, array('name', 'title', 'type', 'size', 'val', 'position'))) $sort = 'position';
+
+        $sort_sql   = $sort.' '.$dir;
+
+        set_pref('smd_bio_meta_sort_column', $sort, 'smd_bio', 2, '', 0, PREF_PRIVATE);
+        set_pref('smd_bio_meta_sort_dir', $dir, 'smd_bio', 2, '', 0, PREF_PRIVATE);
+
+        $switch_dir = ($dir == 'desc') ? 'asc' : 'desc';
+
+        $rs = safe_rows_start('*', SMD_BIO_META, '1=1 ORDER BY '.$sort_sql);
+        $out = array();
+
+        if ($rs) {
+            $out[] =
+            n. '<form id="smd_bio_form" action="index.php" method="post" name="longform" class="multi_edit_form">'.
+
+            n.'<div class="txp-listtables">'.
+            startTable('', '', 'txp-list').
+            n.'<thead>'.
+            tr(
+                hCell(fInput('checkbox', 'select_all', 0, '', '', '', '', '', 'select_all'), '', ' scope="col" title="'.gTxt('toggle_all_selected').'" class="txp-list-col-multi-edit"').
+                column_head('name', 'name', 'smd_bio', true, $switch_dir, '', '', ('name' == $sort) ? $dir : '').
+                column_head('title', 'title', 'smd_bio', true, $switch_dir, '', '', ('title' == $sort) ? $dir : '').
+                column_head('type', 'type', 'smd_bio', true, $switch_dir, '', '', ('type' == $sort) ? $dir : '').
+                column_head(gTxt('smd_bio_size'), 'size', 'smd_bio', true, $switch_dir, '', '', ('size' == $sort) ? $dir : '').
+                column_head('value', 'val', 'smd_bio', true, $switch_dir, '', '', ('val' == $sort) ? $dir : '').
+                column_head(gTxt('smd_bio_position'), 'position', 'smd_bio', true, $switch_dir, '', '', ('position' == $sort) ? $dir : '')
+            ).
+            n.'</thead>'.
+            n.'<tbody>';
+
+            while ($a = nextRow($rs)) {
+                extract(doSpecial($a));
+
+                $out[] = tr(
+                    td(fInput('checkbox', 'selected[]', $name), '', 'txp-list-col-multi-edit').
+                    td(eLink('smd_bio', 'meta_edit', 'id', $id, $name)).
+                    td($title).
+                    td($smd_bio_types[$type]['name']).
+                    td($size).
+                    td($val).
+                    td($position)
+                );
+            }
+
+            $out[] = '</tbody>'.
+                endTable().
+                n.'</div>'.
+                $this->multiedit_form('', $sort, $dir, $crit, $search_method).
+                tInput().
+                '</form>';
+        }
+
+        return join(n, $out);
+    }
+
+    /**
+     * [multiedit_form description]
+     * @param  [type] $page          [description]
+     * @param  [type] $sort          [description]
+     * @param  [type] $dir           [description]
+     * @param  [type] $crit          [description]
+     * @param  [type] $search_method [description]
+     * @return [type]                [description]
+     */
+    public function multiedit_form($page, $sort, $dir, $crit, $search_method)
+    {
+        $methods = array(
+            'delete' => gTxt('delete'),
+        );
+
+        return multi_edit($methods, 'smd_bio', 'bio_multi_edit', $page, $sort, $dir, $crit, $search_method);
+    }
+
+    /**
+     * Multi-edit handler.
+     *
+     * @return [type] [description]
+     */
+    public function bio_multi_edit()
+    {
+        $selected = ps('selected');
+
+        if (!$selected or !is_array($selected))
+        {
+            smd_bio();
+        }
+
+        $selected = array_map('assert_string', $selected);
+        $method   = ps('edit_method');
+        $changed  = array();
+        $key = '';
+
+        switch ($method)
+        {
+            case 'delete':
+                return $this->meta_del($selected);
+                break;
+
+            default:
+                $key = '';
+                $val = '';
+                break;
+        }
+
         smd_bio();
     }
 
-    $selected = array_map('assert_string', $selected);
-    $method   = ps('edit_method');
-    $changed  = array();
-    $key = '';
 
-    switch ($method)
+    /**
+     * [make_list description]
+     * @param  [type] $val [description]
+     * @return [type]      [description]
+     */
+    public function make_list($val)
     {
-        case 'delete':
-            return smd_bio_meta_del($selected);
-            break;
+        if (strpos(strtolower($val), 'smd_bio_fn') !== false) {
+            // Special function syntax so call the designated
+            // function to retrieve the value(s)
+            $params = do_list($val, '|');
+            array_shift($params); // Remove SMD_BIO_FN
+            $fn = array_shift($params);
 
-        default:
-            $key = '';
-            $val = '';
-            break;
-    }
+            $fnbits = do_list($fn, '::');
+            $fncall = (isset($fnbits[1])) ? array($fnbits[0], $fnbits[1]) : $fnbits[0];
+            $val = call_user_func_array($fncall, $params);
 
-    smd_bio();
-}
+            if (is_array($val)) {
+                // Fake a string list of name => val pairs
+                $out = array();
 
-// ------------------------
-function smd_bio_meta_make_list($val) {
+                foreach ($val as $idx => $item) {
+                    $out[] = str_replace(',', '&#44;', $idx . ' => ' . $item); // Preserve commas by encoding them
+                }
 
-    if (strpos(strtolower($val), 'smd_bio_fn') !== false) {
-        // Special function syntax so call the designated
-        // function to retrieve the value(s)
-        $params = do_list($val, '|');
-        array_shift($params); // Remove SMD_BIO_FN
-        $fn = array_shift($params);
-
-        $fnbits = do_list($fn, '::');
-        $fncall = (isset($fnbits[1])) ? array($fnbits[0], $fnbits[1]) : $fnbits[0];
-        $val = call_user_func_array($fncall, $params);
-
-        if (is_array($val)) {
-            // Fake a string list of name => val pairs
-            $out = array();
-            foreach ($val as $idx => $item) {
-                $out[] = str_replace(',', '&#44;', $idx . ' => ' . $item); // Preserve commas by encoding them
+                $val = join(', ', $out);
             }
-            $val = join(', ', $out);
         }
-    }
 
-    // Parse the values
-    $wvals = do_list($val, '\r\n');
-    if (count($wvals) == 1) {
-        $wvals = do_list($val);
-    }
-    return join(', ', doArray($wvals, 'trim'));
-}
+        // Parse the values
+        $wvals = do_list($val, '\r\n');
 
-// ------------------------
-function smd_bio_meta_save() {
-    $smd_bio_coltypes = smd_bio_get_coltypes();
-    $smd_bio_unused = smd_bio_get_unused();
-
-    extract(doSlash(psa(array('id', 'name', 'title', 'type', 'coltype', 'colsize', 'size', 'position'))));
-    $val = ps('val'); // Defer doSlash() until later
-
-    $id = assert_int($id);
-    $val = doSlash(smd_bio_meta_make_list($val));
-    $hasDefault = $smd_bio_coltypes[$coltype]['has_default'];
-
-    // Validate the input to ensure items are emptied for types where they're unused
-    foreach ($smd_bio_unused as $unused => $excludes) {
-        if (in_array($type, $excludes)) {
-            $$unused = '';
+        if (count($wvals) == 1) {
+            $wvals = do_list($val);
         }
+
+        return join(', ', doArray($wvals, 'trim'));
     }
 
-    // Validate the input to ensure items that require a column size have one...
-    if (empty($colsize) && $smd_bio_coltypes[$coltype]['size_req'] !== false) {
-        $colsize = $smd_bio_coltypes[$coltype]['size_req'];
-    }
+    /**
+     * [bio_meta_save description]
+     * @return [type] [description]
+     */
+    public function bio_meta_save()
+    {
+        $smd_bio_coltypes = $this->get_coltypes();
+        $smd_bio_unused = $this->get_unused();
 
-    // ... and that ones that don't require one are removed
-    if ($smd_bio_coltypes[$coltype]['size_req'] === false) {
-        $colsize = null;
-    }
+        extract(doSlash(psa(array('id', 'name', 'title', 'type', 'coltype', 'colsize', 'size', 'position'))));
+        $val = ps('val'); // Defer doSlash() until later
 
-    // Try to adjust column type/size if applicable
-    $rs = safe_alter(SMD_BIO, "CHANGE `$name` `$name` $coltype" . (($colsize) ? "($colsize)" : '') . " NULL" . (($hasDefault) ? " DEFAULT NULL" : ''));
-
-    if ($rs) {
-        $rs = safe_update(SMD_BIO_META, "
-            title = '$title',
-            type = '$type',
-            size = '$size',
-            coltype = '$coltype',
-            " . (($colsize) ? "colsize = $colsize," : '') . "
-            val = '$val',
-            position = '$position'",
-            "id = $id"
-        );
-
-        if ($rs) {
-            $msg = gTxt('smd_bio_meta_updated', array('{name}' => $name));
-        } else {
-            $msg = array(gTxt('smd_bio_meta_update_partial', array('{name}' => $name)), E_WARNING);
-        }
-    } else {
-        $msg = array(gTxt('smd_bio_meta_update_failed', array('{name}' => $name)), E_WARNING);
-    }
-
-    smd_bio_config($msg);
-}
-
-// ------------------------
-function smd_bio_meta_add() {
-    $smd_bio_coltypes = smd_bio_get_coltypes();
-    $smd_bio_unused = smd_bio_get_unused();
-
-    extract(doSlash(psa(array('name', 'title', 'type', 'coltype', 'colsize', 'size', 'position'))));
-    $val = ps('val'); // Defer doSlash() until later
-
-    // Use the title as name if it's omitted
-    if ($name === '' && $title !== '') {
-        $name = $title;
-    }
-
-    $name = smd_bio_sanitize($name);
-
-    if (!empty($name) && smd_bio_meta_check($name)) {
-        $size = (empty($size)) ? 25 : $size;
+        $id = assert_int($id);
+        $val = doSlash($this->make_list($val));
         $hasDefault = $smd_bio_coltypes[$coltype]['has_default'];
 
         // Validate the input to ensure items are emptied for types where they're unused
@@ -541,341 +591,563 @@ function smd_bio_meta_add() {
         if (empty($colsize) && $smd_bio_coltypes[$coltype]['size_req'] !== false) {
             $colsize = $smd_bio_coltypes[$coltype]['size_req'];
         }
+
         // ... and that ones that don't require one are removed
         if ($smd_bio_coltypes[$coltype]['size_req'] === false) {
             $colsize = null;
         }
 
-        $ret = safe_alter(SMD_BIO, "ADD `$name` $coltype" . (($colsize) ? "($colsize)" : '') . " NULL" . (($hasDefault) ? " DEFAULT NULL" : ''));
-        $val = doSlash(smd_bio_meta_make_list($val));
+        // Try to adjust column type/size if applicable
+        $rs = safe_alter(SMD_BIO, "CHANGE `$name` `$name` $coltype" . (($colsize) ? "($colsize)" : '') . " NULL" . (($hasDefault) ? " DEFAULT NULL" : ''));
 
-        if ($ret) {
-            $rs = safe_insert(SMD_BIO_META, "
-                name = '$name',
+        if ($rs) {
+            $rs = safe_update(SMD_BIO_META, "
                 title = '$title',
                 type = '$type',
                 size = '$size',
                 coltype = '$coltype',
                 " . (($colsize) ? "colsize = $colsize," : '') . "
                 val = '$val',
-                position = '$position'
-            ");
+                position = '$position'",
+                "id = $id"
+            );
 
             if ($rs) {
-                smd_bio_config(gTxt('smd_bio_meta_added'));
-                return;
-            }
-        }
-    }
-
-    smd_bio_config(array(gTxt('smd_bio_meta_not_added'), E_ERROR));
-}
-
-// ------------------------
-function smd_bio_meta_del($names) {
-
-    $changed = array();
-
-    $names  = $names ? array_map('assert_string', $names) : array(assert_string(ps('name')));
-    $message = '';
-
-    foreach ($names as $name) {
-        $exists = smd_bio_meta_check($name);
-        $ret = @safe_alter(SMD_BIO, "DROP COLUMN `$name`");
-        if ($ret || $exists) {
-            $ret = safe_delete(SMD_BIO_META, "name='$name'");
-            $changed[] = $name;
-        }
-    }
-    smd_bio_config(gTxt('smd_bio_meta_deleted', array('{affected}' => join(', ', $changed))));
-}
-
-// ------------------------
-function smd_bio_meta_check($col) {
-    $ucols = getThings('describe `'.PFX.'txp_users`');
-    $bcols = getThings('describe `'.PFX.SMD_BIO.'`');
-    $cols = array_merge($ucols, $bcols);
-    return (!in_array($col, $cols));
-}
-
-// ************************
-// ADMIN -> USERS PANEL
-// ------------------------
-function smd_bio_fields($evt, $stp, $mt, $data) {
-    global $smd_um_event, $txp_user;
-
-    $out = $vals = array();
-
-    $rstep = gps('step');
-    if(smd_bio_table_exist()) {
-        if (in_array($rstep, array('', 'author_edit', 'smd_um_edit', 'smd_um_save', 'smd_um_change_pass'))) {
-            extract(gpsa(array('user_id')));
-
-            if (empty($user_id) && !has_privs('smd_um.usr.create')) {
-                // This is a self-edit from smd_user_manager, thus the user_id has not been sent
-                $user_id = safe_field('user_id','txp_users',"name = '".doSlash($txp_user)."'");
-            }
-            // Shame we have to double de-clutch here but we can't index on user_id unfortunately ('cos when
-            // inserting new users, the bio functions run _BEFORE_ an auto_increment ID has been generated by Txp)
-            $uname = safe_field('name','txp_users',"user_id = '".doSlash($user_id)."'");
-            $vals = safe_row('*', SMD_BIO, "user_ref='".doSlash($uname)."'");
-        }
-
-        $widgets = safe_rows('*', SMD_BIO_META, '1=1 ORDER BY position');
-
-        foreach ($widgets as $widget) {
-            $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : $widget['val'];
-            $title = ($widget['title']) ? $widget['title'] : $widget['name'];
-            $sizeopts = do_list($widget['size']);
-            $size1 = $sizeopts[0];
-            $size2 = (isset($sizeopts[1])) ? $sizeopts[1] : '';
-            $size3 = (isset($sizeopts[2])) ? $sizeopts[2] : '';
-            $name = 'smd_bio_'.$widget['name'];
-            switch($widget['type']) {
-                case 'list':
-                    $selv = smd_bio_splitval($widget['val']);
-                    list($selv, $dflt) = smd_bio_get_default($selv, $val);
-                    $out[] = inputLabel(
-                        $name,
-                        selectInput($name, $selv, $dflt, false, '', $name),
-                        $title,
-                        '',
-                        'txp-form-field smd_bio_select '.$name
-                    );
-                    break;
-                case 'multilist':
-                    $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : '';
-                    $selv = smd_bio_splitval($widget['val']);
-                    list($selv, $dflt) = smd_bio_get_default($selv, $val);
-                    $use_val = (isset($vals[$widget['name']]) && ($vals[$widget['name']] !== '' || $vals[$widget['name']] !== null)) ? $val : $dflt; // Don't use defaults if this field has been previously saved
-                    $selectedVals = do_list($use_val);
-                    $items = array();
-                    $items[] = '<select name="'.$name.'" class="list multiple" multiple="multiple" onchange="smd_bio_multisel(\''.$name.'\');">';
-                    foreach ($selv as $idx => $lbl) {
-                        // Not using selectInput() because it doesn't support multiples
-                        $items[] = '<option value="ms_'.$idx.'" '.((in_array($idx, $selectedVals)) ? ' selected="selected"' : '') . '>' . $lbl . '</option>';
-                    }
-                    $items[] = '</select>';
-                    $out[] = inputLabel(
-                        $name,
-                        join(n,$items).fInput('hidden',$name,$use_val,'','','','','',$name),
-                        $title,
-                        '',
-                        'txp-form-field smd_bio_select '.$name
-                    );
-                    break;
-                case 'radio':
-                    $selv = smd_bio_splitval($widget['val']);
-                    list($selv, $dflt) = smd_bio_get_default($selv, $val);
-                    $out[] = inputLabel(
-                        $name,
-                        radioSet($selv, $name, $dflt),
-                        $title,
-                        '',
-                        'txp-form-field smd_bio_radio '.$name
-                    );
-                    break;
-                case 'yesnoradio':
-                    $out[] = inputLabel(
-                        $name,
-                        yesnoRadio($name, $val),
-                        $title,
-                        '',
-                        'txp-form-field smd_bio_radio '.$name
-                    );
-                    break;
-                case 'checkbox':
-                    $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : '';
-                    $selv = smd_bio_splitval($widget['val']);
-                    list($selv, $dflt) = smd_bio_get_default($selv, $val);
-                    $use_val = (isset($vals[$widget['name']]) && ($vals[$widget['name']] !== '' || $vals[$widget['name']] !== null)) ? $val : $dflt; // Don't use defaults if this field has been previously saved
-                    $checkedVals = do_list($use_val);
-                    $items = array();
-                    foreach ($selv as $idx => $lbl) {
-                        // Not using checkbox() because it doesn't support onclick in 4.5.x
-                        $items[] = '<input type="checkbox" name="cb_'.$name.'" value="'.$idx.'"'.((in_array($idx, $checkedVals)) ? ' checked="checked"' : '') . ' class="checkbox" onclick="smd_bio_checkbox(\''.$name.'\');" />'.$lbl;
-                    }
-                    $out[] = inputLabel(
-                        $name,
-                        join('', $items).fInput('hidden',$name,$use_val,'','','','','',$name),
-                        $title,
-                        '',
-                        'txp-form-field smd_bio_checkbox '.$name
-                    );
-                    break;
-                case 'textarea':
-                    // Not using text_area() because it doesn't have class attribute in 4.5.x
-                    $size1 = ($size1 == '' || $size1 == 0) ? 40 : $size1;
-                    $size2 = ($size2 == '' || $size2 == 0) ? 5 : $size2;
-                    $out[] = inputLabel(
-                        $name,
-                        '<textarea id="'.$name.'" name="'.$name.'" class="smd_bio_textarea" cols="'.$size1.'" rows="'.$size2.'">'.txpspecialchars($val).'</textarea>',
-                        $title,
-                        '',
-                        'txp-form-field txp-form-field-textarea smd_bio_textarea '.$name
-                    );
-                    break;
-                case 'image':
-                    $parent = $widget['val'];
-                    $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : '';
-                    $where = ($parent) ? "category='".doSlash($parent)."'" : '1=1';
-                    $tree = safe_rows('*', 'txp_image', $where. ' ORDER BY name');
-                    $selv = array();
-                    foreach ($tree as $row) {
-                        $selv[$row['id']] = $row['name'];
-                    }
-                    $out[] = inputLabel(
-                        $name,
-                        '<input type="text" value="'.txpspecialchars($val).'" id="'.$name.'" name="'.$name.'" size='.INPUT_XSMALL.' class="smd_bio_image_id input_xsmall" />'.selectInput($name.'_list', $selv, $val, true, '').'<span class="smd_bio_image"></span><span class="smd_bio_image_data" title="'.(($size1) ? $size1 : '').','.(($size2) ? $size2 : $size1).'"></span>',
-                        $title,
-                        '',
-                        'txp-form-field smd_bio_image_cell '.$name
-                    );
-                    break;
-                case 'number':
-                case 'range':
-                    $min = ($size1 == '') ? '' : " min={$size1}";
-                    $max = ($size2 == '') ? '' : " max={$size2}";
-                    $jmp = ($size3 == '') ? '' : " step={$size3}";
-                    $out[] = inputLabel(
-                        $name,
-                        '<input type="'.$widget['type'].'" value="'.txpspecialchars($val).'" name="'.$name.'" id="'.$name.'"'.$min.$max.$jmp.'" class="smd_bio_'.$widget['type'].'" />',
-                        $title,
-                        '',
-                        'txp-form-field smd_bio_'.$widget['type'].' '.$name
-                    );
-                    break;
-                case 'date':
-                case 'month':
-                case 'week':
-                case 'time':
-                case 'datetime':
-                case 'email':
-                case 'url':
-                case 'text':
-                    // Not using fInput() because it has no MAXLENGTH property and doesn't support HTML 5 elements
-                    $size1 = ($size1 == '' || $size1 == 0) ? 25 : $size1;
-                    $size2 = ($size2 == '' || $size2 == 0) ? $size1 : $size2;
-                    $out[] = inputLabel(
-                        $name,
-                        '<input type="'.$widget['type'].'" value="'.txpspecialchars($val).'" name="'.$name.'" id="'.$name.'" size="'.$size1.'" maxlength="'.$size2.'" class="smd_bio_'.$widget['type'].'" />',
-                        $title,
-                        '',
-                        'txp-form-field smd_bio_'.$widget['type'].' '.$name
-                    );
-                    break;
-            }
-        }
-    }
-    return join('', $out);
-}
-
-// ------------------------
-// Read a name/val array and remove any [*] marker which indicates a default item
-function smd_bio_get_default($list, $curr) {
-    $out = array();
-    $dflt = '';
-    $new_dflt = array();
-    foreach ($list as $item => $value) {
-        $value = str_replace('&#44;', ',', $value); // Revert encoded commas to real literals @see smd_bio_meta_make_list
-        if (($pos = strpos($value, '[*]')) !== false) {
-            $out[$item] = substr($value, 0, $pos);
-            $new_dflt[] = $item;
-        } else {
-            $out[$item] = $value;
-        }
-        if ($item == $curr) {
-            $dflt = $item;
-        }
-    }
-    $dflt = ($dflt) ? $dflt : join(',', $new_dflt);
-
-    return array($out, $dflt);
-}
-
-// ------------------------
-// AJAX calls
-function smd_bio_get_image() {
-    global $img_dir;
-
-    $id = gps('id');
-    if ($id) {
-        $rs = safe_row('*', 'txp_image', "id = '".doSlash($id)."'");
-        extract($rs);
-        $out = array();
-        $out['thumb'] = ($thumbnail) ? hu.$img_dir.'/'.$id.'t'.$ext : '';
-        $out['image'] = hu.$img_dir.'/'.$id.$ext;
-        $out['w'] = $w;
-        $out['h'] = $h;
-        $out['thw'] = ($thumb_w) ? $thumb_w : '';
-        $out['thh'] = ($thumb_h) ? $thumb_h : '';
-        send_xml_response($out);
-    } else {
-        send_xml_response();
-    }
-    exit;
-}
-
-// ------------------------
-// IMPORTANT: constants NOT used for table names
-function smd_bio_get_ebio() {
-    include_once txpath.'/publish/taghandlers.php';
-
-    $id = gps('id');
-    $core = array('user_ref');
-    $rs = safe_row('*', 'smd_bio', "user_ref = '".doSlash($id)."'");
-    $meta = safe_rows('*', 'smd_bio_meta', "1=1");
-//  $include = array_merge($core, array('mug', 'cell', 'department')); // TODO: get these from prefs/meta table
-    $allowed_types = array('text', 'textarea', 'email', 'url', 'date', 'month', 'week', 'time', 'datetime', 'number', 'range');
-    $out = array();
-    foreach ($rs as $idx => $val) {
-//      if (in_array($idx, $include)) {
-            if (in_array($idx, $core)) {
-                $out[$idx] = doSlash($val);
+                $msg = gTxt('smd_bio_meta_updated', array('{name}' => $name));
             } else {
-                foreach($meta as $row) {
-                    if ($row['name'] == $idx) {
-                        if ($row['type'] == "image") {
-                            // Crude str_replace() to remove javascript-breaking single quotes
-                            $out[$idx] = 'smd_image::'.str_replace("'", '', thumbnail(array('id'=> $val)));
-                        } else if (in_array($row['type'], $allowed_types)) {
-                            $out[$idx] = $row['title'].'::'.txpspecialchars(strip_tags($val), ENT_QUOTES);
-                        }
-                        break;
-                    }
+                $msg = array(gTxt('smd_bio_meta_update_partial', array('{name}' => $name)), E_WARNING);
+            }
+        } else {
+            $msg = array(gTxt('smd_bio_meta_update_failed', array('{name}' => $name)), E_WARNING);
+        }
+
+        $this->bio_config($msg);
+    }
+
+    /**
+     * [bio_meta_add description]
+     * @return [type] [description]
+     */
+    public function bio_meta_add()
+    {
+        $smd_bio_coltypes = $this->get_coltypes();
+        $smd_bio_unused = $this->get_unused();
+
+        extract(doSlash(psa(array('name', 'title', 'type', 'coltype', 'colsize', 'size', 'position'))));
+        $val = ps('val'); // Defer doSlash() until later.
+
+        // Use the title as name if it's omitted.
+        if ($name === '' && $title !== '') {
+            $name = $title;
+        }
+
+        $name = smd_bio_sanitize($name);
+
+        if (!empty($name) && $this->meta_check($name)) {
+            $size = (empty($size)) ? 25 : $size;
+            $hasDefault = $smd_bio_coltypes[$coltype]['has_default'];
+
+            // Validate the input to ensure items are emptied for types where they're unused.
+            foreach ($smd_bio_unused as $unused => $excludes) {
+                if (in_array($type, $excludes)) {
+                    $$unused = '';
                 }
             }
-//      }
+
+            // Validate the input to ensure items that require a column size have one...
+            if (empty($colsize) && $smd_bio_coltypes[$coltype]['size_req'] !== false) {
+                $colsize = $smd_bio_coltypes[$coltype]['size_req'];
+            }
+
+            // ... and that ones that don't require one are removed.
+            if ($smd_bio_coltypes[$coltype]['size_req'] === false) {
+                $colsize = null;
+            }
+
+            $ret = safe_alter(SMD_BIO, "ADD `$name` $coltype" . (($colsize) ? "($colsize)" : '') . " NULL" . (($hasDefault) ? " DEFAULT NULL" : ''));
+            $val = doSlash($this->make_list($val));
+
+            if ($ret) {
+                $rs = safe_insert(SMD_BIO_META, "
+                    name = '$name',
+                    title = '$title',
+                    type = '$type',
+                    size = '$size',
+                    coltype = '$coltype',
+                    " . (($colsize) ? "colsize = $colsize," : '') . "
+                    val = '$val',
+                    position = '$position'
+                ");
+
+                if ($rs) {
+                    $this->bio_config(gTxt('smd_bio_meta_added'));
+                    return;
+                }
+            }
+        }
+
+        $this->bio_config(array(gTxt('smd_bio_meta_not_added'), E_ERROR));
     }
-    send_xml_response($out);
-    exit;
-}
 
-// Inject admin-side javascript
-// ------------------------
-function smd_bio_admin_js($evt, $stp) {
-    global $event, $step;
+    /**
+     * [smd_bio_meta_del description]
+     * @param  [type] $names [description]
+     * @return [type]        [description]
+     */
+    public function meta_del($names)
+    {
+        $changed = array();
+        $names  = $names ? array_map('assert_string', $names) : array(assert_string(ps('name')));
+        $message = '';
 
-    $smd_bio_styles = smd_bio_get_styles();
+        foreach ($names as $name) {
+            $exists = $this->meta_check($name);
+            $ret = @safe_alter(SMD_BIO, "DROP COLUMN `$name`");
+            if ($ret || $exists) {
+                $ret = safe_delete(SMD_BIO_META, "name='$name'");
+                $changed[] = $name;
+            }
+        }
 
-    $runon = array(
-        'admin' => array(
-            'evt' => array('admin', 'smd_um'),
-            'stp' => array('', 'smd_um', 'smd_um_edit', 'smd_um_edit', 'smd_um_save', 'smd_um_save_new', 'smd_um_change_pass', 'author_edit', 'author_save', 'author_save_new'),
-        ),
-        'bio' => array(
-            'evt' => array('smd_bio'),
-        ),
-    );
+        $this->bio_config(gTxt('smd_bio_meta_deleted', array('{affected}' => join(', ', $changed))));
+    }
 
-    // ********
-    // js+css for Admin->Users tab
-    // ********
-    if (in_array($event, $runon['admin']['evt']) !== false && in_array($step, $runon['admin']['stp']) !== false) {
-        $css_custom = safe_field('css', 'txp_css', "name='smd_bio'");
-        $css = '<style type="text/css">' . $css_custom .n. $smd_bio_styles['tooltip'] . '</style>';
+    /**
+     * [smd_bio_meta_check description]
+     * @param  [type] $col [description]
+     * @return [type]      [description]
+     */
+    protected function meta_check($col)
+    {
+        $ucols = getThings('describe `'.PFX.'txp_users`');
+        $bcols = getThings('describe `'.PFX.SMD_BIO.'`');
+        $cols = array_merge($ucols, $bcols);
+        return (!in_array($col, $cols));
+    }
 
-    echo <<<EOJS
+    // ************************
+    // ADMIN -> USERS PANEL
+    // ------------------------
+
+    /**
+     * Add fields to the Users panel query.
+     *
+     * @param  string $evt  Textpattern event (panel)
+     * @param  string $stp  Textpattern step (action)
+     * @param  array  $data The current fields/from data
+     * @return array        The amended query content
+     */
+    public function listHandler($evt, $stp, &$data)
+    {
+        static $colinfo = null;
+
+        if ($colinfo === null) {
+            $colinfo = safe_rows('*', SMD_BIO_META, '1=1 ORDER BY position');
+        }
+
+        switch ($stp) {
+            case 'fields':
+                foreach ($colinfo as $row) {
+                    $this->columns[$row['name']] = array(
+                        'title'   => $row['title'],
+                        'type'    => $row['type'],
+                        'coltype' => $row['coltype'],
+                    );
+
+                    switch ($row['coltype']) {
+                        case 'image':
+                            // @TODO
+                            break;
+                        default:
+                            $data[$row['name']] =
+                                 array(
+                                    'column' => SMD_BIO.'.'.$row['name'],
+                                    'label'  => $row['title'],
+                                );
+                            break;
+                    }
+                }
+
+                break;
+            case 'from':
+                $data .= ' LEFT JOIN ' . SMD_BIO . ' ON (' . SMD_BIO . '.user_ref = ' . PFX . 'txp_users.name)';
+                break;
+        }
+    }
+
+    /**
+     * Add columns to the search box.
+     *
+     * @param  string $evt     Textpattern event (panel)
+     * @param  string $stp     Textpattern step (action)
+     * @param  array  $methods The current search methods
+     * @return array           The amended search methods array
+     */
+    public function searchMethods($evt, $stp, &$methods)
+    {
+        foreach ($this->columns as $colname => $opts) {
+            $type = 'text';
+
+            switch ($opts['type']) {
+                case 'date':
+                case 'datetime':
+                case 'number':
+                case 'range':
+                case 'time':
+                    $type = 'numeric';
+            }
+
+            $methods[$colname] = array(
+                'column' => SMD_BIO . '.' . $colname,
+                'label'  => $opts['title'],
+                'type'   => $type,
+            );
+        }
+    }
+
+    /**
+     * Add rows to the Users table.
+     *
+     * @param  string $evt  Textpattern event (panel)
+     * @param  string $stp  Textpattern step (action)
+     * @param  string $data The current block of HTML (unused)
+     * @param  array  $row  The current row of data to format
+     * @return string       The additional data table cells
+     */
+    public function listRow($evt, $stp, $data, $row)
+    {
+        $out = $vals = array();
+        $uname = safe_field('name', 'txp_users', "user_id = '".doSlash($row['user_id'])."'");
+
+        if ($this->columns) {
+            $vals = safe_row(join(', ', array_keys($this->columns)), SMD_BIO, "user_ref='".doSlash($uname)."'");
+        }
+
+        foreach ($vals as $val) {
+            $out[] = td($val ? $val : '-');
+        }
+
+        return implode(n, $out);
+    }
+
+    /**
+     * [smd_bio_fields description]
+     *
+     * @param  [type] $evt  [description]
+     * @param  [type] $stp  [description]
+     * @param  [type] $mt   [description]
+     * @param  [type] $data [description]
+     * @return [type]       [description]
+     */
+    public function bio_fields($evt, $stp, $mt, $data)
+    {
+        global $txp_user;
+
+        $out = $vals = array();
+        $rstep = gps('step');
+
+        if ($this->table_exist()) {
+            if (in_array($rstep, array('', 'author_edit'))) {
+                extract(gpsa(array('user_id')));
+
+                if (!empty($user_id)) {
+                    $uname = safe_field('name','txp_users',"user_id = '".doSlash($user_id)."'");
+                    $vals = safe_row('*', SMD_BIO, "user_ref='".doSlash($uname)."'");
+                }
+            }
+
+            $widgets = safe_rows('*', SMD_BIO_META, '1=1 ORDER BY position');
+
+            foreach ($widgets as $widget) {
+                $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : $widget['val'];
+                $title = ($widget['title']) ? $widget['title'] : $widget['name'];
+                $sizeopts = do_list($widget['size']);
+                $size1 = $sizeopts[0];
+                $size2 = (isset($sizeopts[1])) ? $sizeopts[1] : '';
+                $size3 = (isset($sizeopts[2])) ? $sizeopts[2] : '';
+                $name = 'smd_bio_'.$widget['name'];
+
+                switch($widget['type']) {
+                    case 'list':
+                        $selv = smd_bio_splitval($widget['val']);
+                        list($selv, $dflt) = $this->get_default($selv, $val);
+                        $out[] = inputLabel(
+                            $name,
+                            selectInput($name, $selv, $dflt, false, '', $name),
+                            $title,
+                            '',
+                            'txp-form-field smd_bio_select '.$name
+                        );
+                        break;
+                    case 'multilist':
+                        $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : '';
+                        $selv = smd_bio_splitval($widget['val']);
+                        list($selv, $dflt) = $this->get_default($selv, $val);
+                        $use_val = (isset($vals[$widget['name']]) && ($vals[$widget['name']] !== '' || $vals[$widget['name']] !== null)) ? $val : $dflt; // Don't use defaults if this field has been previously saved
+                        $selectedVals = do_list($use_val);
+                        $items = array();
+                        $items[] = '<select name="'.$name.'" class="list multiple" multiple="multiple" onchange="smd_bio_multisel(\''.$name.'\');">';
+                        foreach ($selv as $idx => $lbl) {
+                            // Not using selectInput() because it doesn't support multiples
+                            $items[] = '<option value="ms_'.$idx.'" '.((in_array($idx, $selectedVals)) ? ' selected="selected"' : '') . '>' . $lbl . '</option>';
+                        }
+                        $items[] = '</select>';
+                        $out[] = inputLabel(
+                            $name,
+                            join(n,$items).fInput('hidden',$name,$use_val,'','','','','',$name),
+                            $title,
+                            '',
+                            'txp-form-field smd_bio_select '.$name
+                        );
+                        break;
+                    case 'radio':
+                        $selv = smd_bio_splitval($widget['val']);
+                        list($selv, $dflt) = $this->get_default($selv, $val);
+                        $out[] = inputLabel(
+                            $name,
+                            radioSet($selv, $name, $dflt),
+                            $title,
+                            '',
+                            'txp-form-field smd_bio_radio '.$name
+                        );
+                        break;
+                    case 'yesnoradio':
+                        $out[] = inputLabel(
+                            $name,
+                            yesnoRadio($name, $val),
+                            $title,
+                            '',
+                            'txp-form-field smd_bio_radio '.$name
+                        );
+                        break;
+                    case 'checkbox':
+                        $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : '';
+                        $selv = smd_bio_splitval($widget['val']);
+                        list($selv, $dflt) = $this->get_default($selv, $val);
+                        $use_val = (isset($vals[$widget['name']]) && ($vals[$widget['name']] !== '' || $vals[$widget['name']] !== null)) ? $val : $dflt; // Don't use defaults if this field has been previously saved
+                        $checkedVals = do_list($use_val);
+                        $items = array();
+                        foreach ($selv as $idx => $lbl) {
+                            // Not using checkbox() because it doesn't support onclick in 4.5.x
+                            $items[] = '<input type="checkbox" name="cb_'.$name.'" value="'.$idx.'"'.((in_array($idx, $checkedVals)) ? ' checked="checked"' : '') . ' class="checkbox" onclick="smd_bio_checkbox(\''.$name.'\');" />'.$lbl;
+                        }
+                        $out[] = inputLabel(
+                            $name,
+                            join('', $items).fInput('hidden',$name,$use_val,'','','','','',$name),
+                            $title,
+                            '',
+                            'txp-form-field smd_bio_checkbox '.$name
+                        );
+                        break;
+                    case 'textarea':
+                        // Not using text_area() because it doesn't have class attribute in 4.5.x
+                        $size1 = ($size1 == '' || $size1 == 0) ? 40 : $size1;
+                        $size2 = ($size2 == '' || $size2 == 0) ? 5 : $size2;
+                        $out[] = inputLabel(
+                            $name,
+                            '<textarea id="'.$name.'" name="'.$name.'" class="smd_bio_textarea" cols="'.$size1.'" rows="'.$size2.'">'.txpspecialchars($val).'</textarea>',
+                            $title,
+                            '',
+                            'txp-form-field txp-form-field-textarea smd_bio_textarea '.$name
+                        );
+                        break;
+                    case 'image':
+                        $parent = $widget['val'];
+                        $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : '';
+                        $where = ($parent) ? "category='".doSlash($parent)."'" : '1=1';
+                        $tree = safe_rows('*', 'txp_image', $where. ' ORDER BY name');
+                        $selv = array();
+                        foreach ($tree as $row) {
+                            $selv[$row['id']] = $row['name'];
+                        }
+                        $out[] = inputLabel(
+                            $name,
+                            '<input type="text" value="'.txpspecialchars($val).'" id="'.$name.'" name="'.$name.'" size='.INPUT_XSMALL.' class="smd_bio_image_id input_xsmall" />'.selectInput($name.'_list', $selv, $val, true, '').'<span class="smd_bio_image"></span><span class="smd_bio_image_data" title="'.(($size1) ? $size1 : '').','.(($size2) ? $size2 : $size1).'"></span>',
+                            $title,
+                            '',
+                            'txp-form-field smd_bio_image_cell '.$name
+                        );
+                        break;
+                    case 'number':
+                    case 'range':
+                        $min = ($size1 == '') ? '' : " min={$size1}";
+                        $max = ($size2 == '') ? '' : " max={$size2}";
+                        $jmp = ($size3 == '') ? '' : " step={$size3}";
+                        $out[] = inputLabel(
+                            $name,
+                            '<input type="'.$widget['type'].'" value="'.txpspecialchars($val).'" name="'.$name.'" id="'.$name.'"'.$min.$max.$jmp.' class="smd_bio_'.$widget['type'].'" />',
+                            $title,
+                            '',
+                            'txp-form-field smd_bio_'.$widget['type'].' '.$name
+                        );
+                        break;
+                    case 'date':
+                    case 'month':
+                    case 'week':
+                    case 'time':
+                    case 'datetime':
+                    case 'email':
+                    case 'url':
+                    case 'text':
+                        // Not using fInput() because it has no MAXLENGTH property and doesn't support HTML 5 elements
+                        $size1 = ($size1 == '' || $size1 == 0) ? 25 : $size1;
+                        $size2 = ($size2 == '' || $size2 == 0) ? $size1 : $size2;
+                        $selv = smd_bio_splitval($widget['val']);
+                        list($selv, $dflt) = $this->get_default($selv, $val);
+                        $use_val = (isset($vals[$widget['name']]) && ($vals[$widget['name']] !== '' || $vals[$widget['name']] !== null)) ? $val : $dflt; // Don't use defaults if this field has been previously saved
+
+                        $out[] = inputLabel(
+                            $name,
+                            '<input type="'.$widget['type'].'" value="'.txpspecialchars($use_val).'" name="'.$name.'" id="'.$name.'" size="'.$size1.'" maxlength="'.$size2.'" class="smd_bio_'.$widget['type'].'" />',
+                            $title,
+                            '',
+                            'txp-form-field smd_bio_'.$widget['type'].' '.$name
+                        );
+                        break;
+                }
+            }
+        }
+
+        return join('', $out);
+    }
+
+    /**
+     * Read a name/val array and remove any [*] marker which indicates a default item.
+     */
+    public function get_default($list, $curr)
+    {
+        $out = array();
+        $dflt = '';
+        $new_dflt = array();
+
+        foreach ($list as $item => $value) {
+            if ($item === 'SMD_BIO_FN') {
+                $out[$item] = $value;
+/*
+                $params = do_list($value, '|');
+                $fn = array_shift($params);
+                $fnbits = do_list($fn, '::');
+                $fncall = (isset($fnbits[1])) ? array($fnbits[0], $fnbits[1]) : $fnbits[0];
+                $dflt = call_user_func_array($fncall, $params);
+*/
+            } else {
+                $value = str_replace('&#44;', ',', $value); // Revert encoded commas to real literals @see $this->make_list
+
+                if (($pos = strpos($value, '[*]')) !== false) {
+                    $out[$item] = substr($value, 0, $pos);
+                    $new_dflt[] = $item;
+                } else {
+                    $out[$item] = $value;
+                }
+
+                if ($item == $curr) {
+                    $dflt = $item;
+                }
+            }
+        }
+
+        $dflt = ($dflt) ? $dflt : join(',', $new_dflt);
+
+        return array($out, $dflt);
+    }
+
+    // ------------------------
+    // AJAX calls
+    public function get_image()
+    {
+        global $img_dir;
+
+        $id = gps('id');
+        if ($id) {
+            $rs = safe_row('*', 'txp_image', "id = '".doSlash($id)."'");
+            extract($rs);
+            $out = array();
+            $out['thumb'] = ($thumbnail) ? hu.$img_dir.'/'.$id.'t'.$ext : '';
+            $out['image'] = hu.$img_dir.'/'.$id.$ext;
+            $out['w'] = $w;
+            $out['h'] = $h;
+            $out['thw'] = ($thumb_w) ? $thumb_w : '';
+            $out['thh'] = ($thumb_h) ? $thumb_h : '';
+            send_xml_response($out);
+        } else {
+            send_xml_response();
+        }
+        exit;
+    }
+
+    // ------------------------
+    // IMPORTANT: constants NOT used for table names
+    public function get_ebio()
+    {
+        include_once txpath.'/publish/taghandlers.php';
+
+        $id = gps('id');
+        $core = array('user_ref');
+        $rs = safe_row('*', 'smd_bio', "user_ref = '".doSlash($id)."'");
+        $meta = safe_rows('*', 'smd_bio_meta', "1=1");
+    //  $include = array_merge($core, array('mug', 'cell', 'department')); // TODO: get these from prefs/meta table
+        $allowed_types = array('text', 'textarea', 'email', 'url', 'date', 'month', 'week', 'time', 'datetime', 'number', 'range');
+        $out = array();
+        foreach ($rs as $idx => $val) {
+    //      if (in_array($idx, $include)) {
+                if (in_array($idx, $core)) {
+                    $out[$idx] = doSlash($val);
+                } else {
+                    foreach($meta as $row) {
+                        if ($row['name'] == $idx) {
+                            if ($row['type'] == "image") {
+                                // Crude str_replace() to remove javascript-breaking single quotes
+                                $out[$idx] = 'smd_image::'.str_replace("'", '', thumbnail(array('id'=> $val)));
+                            } else if (in_array($row['type'], $allowed_types)) {
+                                $out[$idx] = $row['title'].'::'.txpspecialchars(strip_tags($val), ENT_QUOTES);
+                            }
+                            break;
+                        }
+                    }
+                }
+    //      }
+        }
+        send_xml_response($out);
+        exit;
+    }
+
+    /**
+     * Inject admin-side javascript
+     *
+     * @param  [type] $evt [description]
+     * @param  [type] $stp [description]
+     * @return [type]      [description]
+     */
+    public function admin_js($evt, $stp)
+    {
+        global $event, $step;
+
+        $smd_bio_styles = $this->get_styles();
+
+        $runon = array(
+            'admin' => array(
+                'evt' => array('admin', 'smd_um'),
+                'stp' => array('', 'smd_um', 'smd_um_edit', 'smd_um_edit', 'smd_um_save', 'smd_um_save_new', 'smd_um_change_pass', 'author_edit', 'author_save', 'author_save_new'),
+            ),
+            'bio' => array(
+                'evt' => array('smd_bio'),
+            ),
+        );
+
+        // ********
+        // js+css for Admin->Users tab
+        // ********
+        if (in_array($event, $runon['admin']['evt']) !== false && in_array($step, $runon['admin']['stp']) !== false) {
+            $css_custom = safe_field('css', 'txp_css', "name='smd_bio'");
+
+            if (class_exists('\Textpattern\UI\Style')) {
+                $css = Txp::get('\Textpattern\UI\Style')->setContent($css_custom .n. $smd_bio_styles['tooltip']);
+            } else {
+                $css = '<style>' . $css_custom .n. $smd_bio_styles['tooltip'] . '</style>';
+            }
+
+            // @todo script_js() this.
+        echo <<<EOJS
 <script type="text/javascript">
 //<![CDATA[
 
@@ -928,7 +1200,7 @@ jQuery(function() {
         }
         sendAsyncEvent({
                 event: textpattern.event,
-                smd_bio_step: 'smd_bio_get_image',
+                step: 'smd_bio_get_image',
                 id: val
             }, function(data) {
                 data = jQuery(data);
@@ -976,7 +1248,7 @@ jQuery(function() {
 
             sendAsyncEvent({
                     event: textpattern.event,
-                    smd_bio_step: 'smd_bio_get_ebio',
+                    step: 'smd_bio_get_ebio',
                     id: person
                 }, function(data) {
                     data = jQuery(data);
@@ -1030,24 +1302,30 @@ jQuery(function() {
 </script>
 {$css}
 EOJS;
-    }
-
-    // ********
-    // js for Extensions->Bio config tab
-    // ********
-    if (in_array($event, $runon['bio']['evt'])) {
-        $smd_bio_types = smd_bio_get_types();
-        $smd_bio_unused = smd_bio_get_unused();
-
-        $css = '<style type="text/css">' . $smd_bio_styles['meta'] . '</style>';
-        $js_unused = join(',', doArray($smd_bio_unused['size'], 'doQuote'));
-
-        foreach ($smd_bio_types as $type => $data) {
-            $type_json[] = 'smd_bio_types["'.$type.'"] = { "dflt_type": "'.$data['coltype'].'", "dflt_size": "'.$data['colsize'].'", "fixed": "'.$data['fixed'].'" };';
         }
-        $type_json = join(n, $type_json);
 
-        echo <<<EOJS
+        // ********
+        // js for Extensions->Bio config tab
+        // ********
+        if (in_array($event, $runon['bio']['evt'])) {
+            $smd_bio_types = smd_bio_get_types();
+            $smd_bio_unused = $this->get_unused();
+
+            if (class_exists('\Textpattern\UI\Style')) {
+                $css = Txp::get('\Textpattern\UI\Style')->setContent($smd_bio_styles['meta']);
+            } else {
+                $css = '<style>' . $smd_bio_styles['meta'] . '</style>';
+            }
+
+            $js_unused = join(',', doArray($smd_bio_unused['size'], 'doQuote'));
+
+            foreach ($smd_bio_types as $type => $data) {
+                $type_json[] = 'smd_bio_types["'.$type.'"] = { "dflt_type": "'.$data['coltype'].'", "dflt_size": "'.$data['colsize'].'", "fixed": "'.$data['fixed'].'" };';
+            }
+
+            $type_json = join(n, $type_json);
+
+            echo <<<EOJS
 <script type="text/javascript">
 //<![CDATA[
 var smd_bio_unused = [{$js_unused}];
@@ -1134,9 +1412,10 @@ jQuery(function() {
         sendAsyncEvent(
             {
                 event: textpattern.event,
-                step: 'smd_bio_save_pane_state',
+                step: 'save_pane_state',
                 pane: 'coltype',
-                visible: (jQuery(this).hasClass('expanded'))
+                visible: (jQuery(this).hasClass('expanded')),
+                _txp_token: textpattern._txp_token
             }
         );
     });
@@ -1145,135 +1424,389 @@ jQuery(function() {
 </script>
 {$css}
 EOJS;
-    }
-}
-
-// ------------------------
-// Make the name/val pairs for selectInput / radio / checkbox sets
-function smd_bio_splitval($val) {
-    $selv = array();
-
-    $wvals = preg_split("/[\r\n,]+/", $val, -1, PREG_SPLIT_NO_EMPTY);
-    foreach ($wvals as $wval) {
-        $prts = explode('=>', $wval);
-        if (count($prts) == 1) {
-            $prts[1] = $prts[0];
-            $prts[0] = smd_bio_sanitize($prts[0]);
         }
-        $selv[trim($prts[0])] = trim($prts[1]);
     }
-    return $selv;
-}
 
-// ------------------------
-// Super-sanitize the passed value so we can make variable names from the returned string
-function smd_bio_sanitize($val) {
-    return strtolower(str_replace("-", "_", sanitizeForUrl($val)));
-}
 
-// ------------------------
-function smd_bio_save($evt, $stp) {
-    global $prefs;
+    /**
+     * Save the biographical info along with the other core user data.
+     *
+     * @param  [type] $evt [description]
+     * @param  [type] $stp [description]
+     * @return [type]      [description]
+     */
+    public function bio_save($evt, $stp) {
+        global $prefs;
 
-    if (smd_bio_table_exist()) {
-        $targetvars = array();
-        extract(doSlash(psa(array('privs', 'name', 'email', 'RealName', 'user_id'))));
+        if ($this->table_exist()) {
+            $targetvars = array();
+            extract(doSlash(psa(array('privs', 'name', 'email', 'RealName', 'user_id'))));
 
-        if (get_pref('smd_bio_sanitize_name', 0) > 0) {
-            // Sanitize and pass the new name forward to the actual txp_user save routine.
-            $name = strtolower(sanitizeForUrl($name));
-            $_POST['name'] = $name;
-        }
-
-        $length = function_exists('mb_strlen') ? mb_strlen($name, '8bit') : strlen($name);
-
-        if (($user_id || $name) and $length <= 64 and is_valid_email($email)) {
-            foreach ($_POST as $idx => $item) {
-                if (strpos($idx, 'smd_bio_') === 0) {
-                    $targetvars[] = $idx;
-                }
+            if (get_pref('smd_bio_sanitize_name', 0) > 0) {
+                // Sanitize and pass the new name forward to the actual txp_user save routine.
+                $name = strtolower(sanitizeForUrl($name));
+                $_POST['name'] = $name;
             }
 
-            // Double de-clutch again... dammit :-(
-            $user_id = gps('user_id');
+            $length = function_exists('mb_strlen') ? mb_strlen($name, '8bit') : strlen($name);
 
-            if ($user_id) {
-                $user_ref = safe_field('name', 'txp_users', "user_id = '$user_id'");
+            if (($user_id || $name) and $length <= 64 and is_valid_email($email)) {
+                foreach ($_POST as $idx => $item) {
+                    if (strpos($idx, 'smd_bio_') === 0) {
+                        $targetvars[] = $idx;
+                    }
+                }
+
+                // Double de-clutch again... dammit :-(
+                $user_id = gps('user_id');
+
+                if ($user_id) {
+                    $user_ref = safe_field('name', 'txp_users', "user_id = '$user_id'");
+                } else {
+                    $user_ref = $name;
+                }
+
+                extract(gpsa($targetvars));
+                $bcols = getRows('describe `'.PFX.SMD_BIO.'`');
+                $sqlSet = array();
+                $biocols = array();
+
+                foreach ($bcols as $a) {
+                    $biocols[$a['Field']] = $a['Type'];
+                }
+
+                foreach ($targetvars as $var) {
+                    $colname = str_replace('smd_bio_', '', $var);
+
+                    if (array_key_exists($colname, $biocols)) {
+                        $isNumber = (strpos($biocols[$colname], 'int') === 0);
+                        $newVal = ($isNumber) ? intval($$var) : $$var;
+                        $sqlSet[] = "`$colname` = '".doSlash($newVal)."'";
+                    }
+                }
+
+                if ($sqlSet) {
+                    $rs = safe_upsert(SMD_BIO, join(',', $sqlSet), "`user_ref` = '".doSlash($user_ref)."'");
+                }
+            }
+        }
+    }
+
+    /**
+     * Delete one or more bios via multi-edit.
+     *
+     * @param  string $evt Textpattern event
+     * @param  string $stp Textpattern step
+     */
+    public function bio_delete($evt, $stp)
+    {
+        global $txp_user;
+
+        if ($this->table_exist()) {
+            // Since we are executing 'pre' delete we need to unfortunately duplicate some of the checks
+            // from txp_admin.php so we minimise the opportunity to delete someone by mistake
+            $selected = ps('selected');
+            $method = ps('edit_method');
+            if (!$selected or !is_array($selected)) {
+                return;
+            }
+            if ($method != 'delete') {
+                return;
+            }
+
+            $names = safe_column('name', 'txp_users', "name IN ('".join("','", doSlash($selected))."') AND name != '".doSlash($txp_user)."'");
+            if (!$names) return;
+
+            $assign_assets = ps('assign_assets');
+            if ($assign_assets === '') {
+                return;
+            } elseif (in_array($assign_assets, $names)) {
+                return;
             } else {
-                $user_ref = $name;
-            }
-
-            extract(gpsa($targetvars));
-            $bcols = getRows('describe `'.PFX.SMD_BIO.'`');
-            $sqlSet = array();
-            $biocols = array();
-
-            foreach ($bcols as $a) {
-                $biocols[$a['Field']] = $a['Type'];
-            }
-
-            foreach ($targetvars as $var) {
-                $colname = str_replace('smd_bio_', '', $var);
-
-                if (array_key_exists($colname, $biocols)) {
-                    $isNumber = (strpos($biocols[$colname], 'int') === 0);
-                    $newVal = ($isNumber) ? intval($$var) : $$var;
-                    $sqlSet[] = "`$colname` = '".doSlash($newVal)."'";
-                }
-            }
-
-            if ($sqlSet) {
-                $rs = safe_upsert(SMD_BIO, join(',', $sqlSet), "`user_ref` = '".doSlash($user_ref)."'");
+                // All the checks passed -- do it
+                safe_delete(SMD_BIO, "user_ref IN ('".join("','", doSlash($names))."')");
             }
         }
     }
-}
 
-// ------------------------
-function smd_bio_delete($evt, $stp) {
-    global $txp_user;
+    /**
+     * Store the state of the coltype twisty (open/closed) [Ajax].
+     * @todo: it remembers the toggle state but doesn't apply it on refresh
+     */
+    public function save_pane_state()
+    {
+        global $event;
 
-    if (smd_bio_table_exist()) {
-        // Since we are executing 'pre' delete we need to unfortunately duplicate some of the checks
-        // from txp_admin.php so we minimise the opportunity to delete someone by mistake
-        $selected = ps('selected');
-        $method = ps('edit_method');
-        if (!$selected or !is_array($selected)) {
-            return;
-        }
-        if ($method != 'delete') {
-            return;
-        }
+        $panes = array('coltype');
+        $pane = gps('pane');
 
-        $names = safe_column('name', 'txp_users', "name IN ('".join("','", doSlash($selected))."') AND name != '".doSlash($txp_user)."'");
-        if (!$names) return;
-
-        $assign_assets = ps('assign_assets');
-        if ($assign_assets === '') {
-            return;
-        } elseif (in_array($assign_assets, $names)) {
-            return;
+        if (in_array($pane, $panes)) {
+            set_pref("pane_smd_bio_{$pane}_visible", (gps('visible') == 'true' ? '1' : '0'), $event, PREF_HIDDEN, 'yesnoradio', 0, PREF_PRIVATE);
+            send_xml_response();
         } else {
-            // All the checks passed -- do it
-            safe_delete(SMD_BIO, "user_ref IN ('".join("','", doSlash($names))."')");
+            send_xml_response(array('http-status' => '400 Bad Request'));
+        }
+    }
+
+    /**
+     * Fetch available database column types.
+     *
+     * In alphabetical order, or sorting on the admin panel gets screwy.
+     *
+     * @return array $smd_bio_coltypes
+     */
+    public function get_coltypes()
+    {
+        $smd_bio_coltypes = array(
+            'date' => array(
+                'title'       => 'Date [YYYY-MM-DD]',
+                'size_req'    => false,
+                'has_default' => true,
+            ),
+            'datetime' => array(
+                'title'       => 'Date + time [YYYY-MM-DD HH:MN:SS]',
+                'size_req'    => false,
+                'has_default' => true,
+            ),
+            'double' => array(
+                'title'       => 'Double precision float',
+                'size_req'    => false,
+                'has_default' => true,
+            ),
+            'float' => array(
+                'title'       => 'Floating point number',
+                'size_req'    => false,
+                'has_default' => true,
+            ),
+            'int' => array(
+                'title'       => 'Integer [up to 4294967295]',
+                'size_req'    => '11',
+                'has_default' => true,
+            ),
+            'longtext' => array(
+                'title'       => 'Long text [up to 4GB]',
+                'size_req'    => false,
+                'has_default' => false,
+            ),
+            'mediumint' => array(
+                'title'       => 'Medium integer [up to 16777215]',
+                'size_req'    => '8',
+                'has_default' => true,
+            ),
+            'mediumtext' => array(
+                'title'       => 'Medium text [up to 16MB]',
+                'size_req'    => false,
+                'has_default' => false,
+            ),
+            'smallint' => array(
+                'title'       => 'Small integer [up to 65535]',
+                'size_req'    => '4',
+                'has_default' => true,
+            ),
+            'text' => array(
+                'title'       => 'Text [up to 64KB chars]',
+                'size_req'    => false,
+                'has_default' => false,
+            ),
+            'time' => array(
+                'title'       => 'Time [HH:MN:SS]',
+                'size_req'    => false,
+                'has_default' => true,
+            ),
+            'timestamp' => array(
+                'title'       => 'Timestamp [seconds since UNIX epoch]',
+                'size_req'    => false,
+                'has_default' => true,
+            ),
+            'tinyint' => array(
+                'title'       => 'Tiny integer [up to 255]',
+                'size_req'    => '3',
+                'has_default' => true,
+            ),
+            'tinytext' => array(
+                'title'       => 'Tiny text [up to 255 chars]',
+                'size_req'    => false,
+                'has_default' => false,
+            ),
+            'varbinary' => array(
+                'title'       => 'Binary varchar [size subject to max row size]',
+                'size_req'    => '255',
+                'has_default' => true,
+            ),
+            'varchar' => array(
+                'title'       => 'Varchar [size subject to max row size]',
+                'size_req'    => '255',
+                'has_default' => true,
+            ),
+        );
+
+        return $smd_bio_coltypes;
+    }
+
+    /**
+     * Fetch the widget types that need clearing when unused.
+     *
+     * @return array $smd_bio_unused List of unused types indexed by field
+     */
+    public function get_unused()
+    {
+        $smd_bio_unused = array(
+            'size' => array('list', 'multilist', 'radio', 'yesnoradio', 'checkbox'),
+        );
+
+        return $smd_bio_unused;
+    }
+
+    // ************************
+    // TABLE MANAGEMENT
+    // ------------------------
+    /**
+     * Check if the tables exist and are defined okay.
+     *
+     * @return bool
+     */
+    public function table_exist()
+    {
+        static $smd_bio_table_ok = array();
+
+        if (isset($smd_bio_table_ok['meta'])) {
+            return ($smd_bio_table_ok['meta'] === $smd_bio_table_ok['field']);
+        }
+
+        $meta = safe_count(SMD_BIO_META, '1=1');
+        $flds = safe_show('columns', SMD_BIO);
+
+        $smd_bio_table_ok['meta'] = (int)$meta;
+        $smd_bio_table_ok['field'] = (int)count($flds) - 1; // Subtract the user_ref column as it's always present
+
+        return($smd_bio_table_ok['meta'] === $smd_bio_table_ok['field']);
+    }
+
+    /**
+     * Install tables and handle upgrades.
+     */
+    public function install()
+    {
+        global $DB;
+
+        $smd_bio_types = smd_bio_get_types();
+        $smd_bio_coltypes = $this->get_coltypes();
+
+        $GLOBALS['txp_err_count'] = 0;
+        $msg = '';
+        $debug = gps('debug');
+
+        $ret = '';
+        $sql = array();
+        $sql[] = "CREATE TABLE IF NOT EXISTS `".PFX.SMD_BIO."` (
+            `user_ref` varchar(64) NOT NULL default '',
+            UNIQUE KEY `user_ref` (`user_ref`)
+        ) PACK_KEYS=1";
+
+        $sql[] = "CREATE TABLE IF NOT EXISTS `".PFX.SMD_BIO_META."` (
+            `id` int(4) NOT NULL auto_increment,
+            `title` varchar(64) NULL default '',
+            `name` varchar(64) NOT NULL default '',
+            `type` set(".doQuote(join("','", array_keys($smd_bio_types))).") NOT NULL default 'text',
+            `size` varchar(10) NULL default 0,
+            `coltype` set(".doQuote(join("','", array_keys($smd_bio_coltypes))).") NOT NULL default 'varchar',
+            `colsize` smallint(4) NULL default 0,
+            `val` text NULL,
+            `position` varchar(16) NULL default '',
+            PRIMARY KEY (`id`),
+            UNIQUE KEY (`name`)
+        ) AUTO_INCREMENT=1";
+
+        if ($debug) {
+            dmp($sql);
+        }
+
+        foreach ($sql as $qry) {
+            $ret = safe_query($qry);
+
+            if ($ret===false) {
+                $GLOBALS['txp_err_count']++;
+                echo "<b>".$GLOBALS['txp_err_count'].".</b> ".mysql_error()."<br />\n";
+                echo "<!--\n $qry \n-->\n";
+            }
+        }
+
+        // Handle upgrades.
+        // Alter the position field from int to varchar so positioning can be non-numeric.
+        $ret = getThings("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = '".PFX.SMD_BIO_META."' AND table_schema = '" . $DB->db . "' AND column_name = 'position'");
+        if ($ret != 'varchar') {
+            safe_alter(SMD_BIO_META, "CHANGE `position` `position` VARCHAR( 16 ) NULL DEFAULT ''", $debug);
+        }
+
+        // Add the coltype and colsize columns.
+        $flds = getThings('SHOW COLUMNS FROM `'.PFX.SMD_BIO_META.'`');
+
+        if (!in_array('coltype', $flds)) {
+            safe_alter(SMD_BIO_META, "ADD `coltype` SET(".doQuote(join("','", array_keys($smd_bio_coltypes))).") NOT NULL default '' after `size`", $debug);
+            safe_alter(SMD_BIO_META, "ADD `colsize` SMALLINT(4) NULL default 0 after `coltype`", $debug);
+        }
+
+        // Add multiple select list & date flavour support to the 'type' set, and rename 'text_input' to just 'text'
+        $toChange = safe_column('id', SMD_BIO_META, 'type="text_input"');
+        $fld = getRows("SHOW FULL COLUMNS FROM `".PFX.SMD_BIO_META."` LIKE 'type'");
+        $ft = $fld[0]['Type'];
+
+        if ( (strpos($ft, 'multilist') === false) || (strpos($ft, 'text_input') !== false) || (strpos($ft, 'month') === false) ) {
+            safe_alter(SMD_BIO_META, "CHANGE `type` `type` SET(".doQuote(join("','", array_keys($smd_bio_types))).")", $debug);
+        }
+
+        if ($toChange) {
+            safe_update(SMD_BIO_META, 'type="text"', "id in ('". join("','", $toChange) ."')", $debug);
+        }
+
+        if ($GLOBALS['txp_err_count'] == 0) {
+            $this->message = gTxt('smd_bio_tbl_installed');
+        } else {
+            $this->message = gTxt('smd_bio_tbl_not_installed');
+        }
+    }
+
+    /**
+     * Drop table if in database.
+     */
+    public function remove()
+    {
+        $ret = $msg = '';
+        $sql = array();
+        $GLOBALS['txp_err_count'] = 0;
+        $sql[] = "DROP TABLE IF EXISTS " .PFX.SMD_BIO. "; ";
+        $sql[] = "DROP TABLE IF EXISTS " .PFX.SMD_BIO_META. "; ";
+
+        if(gps('debug')) {
+            dmp($sql);
+        }
+
+        foreach ($sql as $qry) {
+            $ret = safe_query($qry);
+
+            if ($ret===false) {
+                $GLOBALS['txp_err_count']++;
+                echo "<b>".$GLOBALS['txp_err_count'].".</b> ".mysql_error()."<br />\n";
+                echo "<!--\n $qry \n-->\n";
+            }
+        }
+
+        if ($GLOBALS['txp_err_count'] == 0) {
+            $this->message = gTxt('smd_bio_tbl_removed');
+        } else {
+            $this->message = gTxt('smd_bio_tbl_not_removed');
         }
     }
 }
 
-// -------------------------------------------------------------
-function smd_bio_save_pane_state() {
-    global $event;
-    $panes = array('coltype');
-    $pane = gps('pane');
-    if (in_array($pane, $panes)) {
-        set_pref("pane_smd_bio_{$pane}_visible", (gps('visible') == 'true' ? '1' : '0'), $event, PREF_HIDDEN, 'yesnoradio', 0, PREF_PRIVATE);
-        send_xml_response();
-    } else {
-        send_xml_response(array('http-status' => '400 Bad Request'));
-    }
-}
+//-----------
+// Middleware - glue functions used by front-and back-end code.
+//-----------
 
-// -------------------------------------------------------------
+/**
+ * [smd_bio_form_submit description]
+ * @return [type] [description]
+ */
 function smd_bio_form_submit() {
     global $mem_form_type;
 
@@ -1387,25 +1920,15 @@ function smd_bio_find_author($author_in='', $places=array('biotag', 'txpuser', '
     return $author;
 }
 
-// -------------------------------------------------------------
-// Return a list of core columns in the txp_users table.
-// This could be done programmatically but isn't: save a
-// query, save the world
-function smd_bio_core_cols() {
-    // The indices are the gTxt() names for the associated field
-    return array(
-        'id'         => 'user_id',
-        'name'       => 'name',
-        'real_name'  => 'RealName',
-        'email'      => 'email',
-        'privileges' => 'privs',
-        'date'       => 'last_access'
-    );
-}
-
-// -------------------------------------------------------------
-// In alphabetical order or sorting on the admin panel gets screwy
-function smd_bio_get_types() {
+/**
+ * Fetch available widget types.
+ *
+ * In alphabetical order or sorting on the admin panel gets screwy.
+ *
+ * @return array $smd_bio_types
+ */
+function smd_bio_get_types()
+{
     $smd_bio_types = array(
         'checkbox' => array(
                 'name'    => 'Checkbox(es)',
@@ -1513,246 +2036,61 @@ function smd_bio_get_types() {
 
     return $smd_bio_types;
 }
+/**
+ * Make the name/val pairs for selectInput / radio / checkbox sets.
+ *
+ * @param  [type] $val [description]
+ * @return [type]      [description]
+ */
+function smd_bio_splitval($val)
+{
+    $selv = array();
 
-// -------------------------------------------------------------
-// In alphabetical order or sorting on the admin panel gets screwy
-function smd_bio_get_coltypes() {
-    $smd_bio_coltypes = array(
-        'date' => array(
-            'title'       => 'Date [YYYY-MM-DD]',
-            'size_req'    => false,
-            'has_default' => true,
-        ),
-        'datetime' => array(
-            'title'       => 'Date + time [YYYY-MM-DD HH:MN:SS]',
-            'size_req'    => false,
-            'has_default' => true,
-        ),
-        'double' => array(
-            'title'       => 'Double precision float',
-            'size_req'    => false,
-            'has_default' => true,
-        ),
-        'float' => array(
-            'title'       => 'Floating point number',
-            'size_req'    => false,
-            'has_default' => true,
-        ),
-        'int' => array(
-            'title'       => 'Integer [up to 4294967295]',
-            'size_req'    => '11',
-            'has_default' => true,
-        ),
-        'longtext' => array(
-            'title'       => 'Long text [up to 4GB]',
-            'size_req'    => false,
-            'has_default' => false,
-        ),
-        'mediumint' => array(
-            'title'       => 'Medium integer [up to 16777215]',
-            'size_req'    => '8',
-            'has_default' => true,
-        ),
-        'mediumtext' => array(
-            'title'       => 'Medium text [up to 16MB]',
-            'size_req'    => false,
-            'has_default' => false,
-        ),
-        'smallint' => array(
-            'title'       => 'Small integer [up to 65535]',
-            'size_req'    => '4',
-            'has_default' => true,
-        ),
-        'text' => array(
-            'title'       => 'Text [up to 64KB chars]',
-            'size_req'    => false,
-            'has_default' => false,
-        ),
-        'time' => array(
-            'title'       => 'Time [HH:MN:SS]',
-            'size_req'    => false,
-            'has_default' => true,
-        ),
-        'timestamp' => array(
-            'title'       => 'Timestamp [seconds since UNIX epoch]',
-            'size_req'    => false,
-            'has_default' => true,
-        ),
-        'tinyint' => array(
-            'title'       => 'Tiny integer [up to 255]',
-            'size_req'    => '3',
-            'has_default' => true,
-        ),
-        'tinytext' => array(
-            'title'       => 'Tiny text [up to 255 chars]',
-            'size_req'    => false,
-            'has_default' => false,
-        ),
-        'varbinary' => array(
-            'title'       => 'Binary varchar [size subject to max row size]',
-            'size_req'    => '255',
-            'has_default' => true,
-        ),
-        'varchar' => array(
-            'title'       => 'Varchar [size subject to max row size]',
-            'size_req'    => '255',
-            'has_default' => true,
-        ),
-    );
+    $wvals = preg_split("/[\r\n,]+/", $val, -1, PREG_SPLIT_NO_EMPTY);
 
-    return $smd_bio_coltypes;
+    foreach ($wvals as $wval) {
+        $prts = explode('=>', $wval);
+
+        if (count($prts) == 1) {
+            $prts[1] = $prts[0];
+            $prts[0] = smd_bio_sanitize($prts[0]);
+        }
+
+        $selv[trim($prts[0])] = trim($prts[1]);
+    }
+
+    return $selv;
+}
+
+// ------------------------
+// Super-sanitize the passed value so we can make variable names from the returned string
+function smd_bio_sanitize($val) {
+    return strtolower(str_replace("-", "_", sanitizeForUrl($val)));
 }
 
 // -------------------------------------------------------------
-function smd_bio_get_unused() {
-    $smd_bio_unused = array(
-        'size' => array('list', 'multilist', 'radio', 'yesnoradio', 'checkbox'),
+// Return a list of core columns in the txp_users table.
+// This could be done programmatically but isn't: save a
+// query, save the world
+function smd_bio_core_cols()
+{
+    // The indices are the gTxt() names for the associated field
+    return array(
+        'id'         => 'user_id',
+        'name'       => 'name',
+        'real_name'  => 'RealName',
+        'email'      => 'email',
+        'privileges' => 'privs',
+        'date'       => 'last_access'
     );
-
-    return $smd_bio_unused;
-}
-
-// ************************
-// TABLE MANAGEMENT
-// ------------------------
-function smd_bio_table_exist() {
-    static $smd_bio_table_ok = array();
-
-    if (isset($smd_bio_table_ok['meta'])) {
-        return ($smd_bio_table_ok['meta'] === $smd_bio_table_ok['field']);
-    }
-
-    $meta = safe_count(SMD_BIO_META, '1=1');
-    $flds = @safe_show('columns', SMD_BIO);
-
-    $smd_bio_table_ok['meta'] = (int)$meta;
-    $smd_bio_table_ok['field'] = (int)count($flds) - 1; // Subtract the user_ref column as it's always present
-
-    return($smd_bio_table_ok['meta'] === $smd_bio_table_ok['field']);
-}
-
-// ------------------------
-function smd_bio_table_install($showpane=1) {
-    global $DB;
-
-    $smd_bio_types = smd_bio_get_types();
-    $smd_bio_coltypes = smd_bio_get_coltypes();
-
-    $GLOBALS['txp_err_count'] = 0;
-    $msg = '';
-    $debug = gps('debug');
-
-    $ret = '';
-    $sql = array();
-    $sql[] = "CREATE TABLE IF NOT EXISTS `".PFX.SMD_BIO."` (
-        `user_ref` varchar(64) NOT NULL default '',
-        UNIQUE KEY `user_ref` (`user_ref`)
-    ) ENGINE=MyISAM, CHARACTER SET=utf8, PACK_KEYS=1";
-
-    $sql[] = "CREATE TABLE IF NOT EXISTS `".PFX.SMD_BIO_META."` (
-        `id` int(4) NOT NULL auto_increment,
-        `title` varchar(64) NULL default '' COLLATE utf8_general_ci,
-        `name` varchar(64) NOT NULL default '' COLLATE utf8_general_ci,
-        `type` set(".doQuote(join("','", array_keys($smd_bio_types))).") NOT NULL default 'text',
-        `size` varchar(10) NULL default 0,
-        `coltype` set(".doQuote(join("','", array_keys($smd_bio_coltypes))).") NOT NULL default 'varchar',
-        `colsize` smallint(4) NULL default 0,
-        `val` text NULL COLLATE utf8_general_ci,
-        `position` varchar(16) NULL default '',
-        PRIMARY KEY (`id`),
-        UNIQUE KEY (`name`)
-    ) ENGINE=MyISAM, CHARACTER SET=utf8, AUTO_INCREMENT=1";
-
-    if ($debug) {
-        dmp($sql);
-    }
-    foreach ($sql as $qry) {
-        $ret = safe_query($qry);
-        if ($ret===false) {
-            $GLOBALS['txp_err_count']++;
-            echo "<b>".$GLOBALS['txp_err_count'].".</b> ".mysql_error()."<br />\n";
-            echo "<!--\n $qry \n-->\n";
-        }
-    }
-
-    // Handle upgrades from v0.3x to v0.40.
-    // Upgrade table collation if necessary
-    $ret = getRows("SHOW TABLE STATUS WHERE name IN ('".PFX.SMD_BIO."', '".PFX.SMD_BIO_META."')");
-    if ($ret[0]['Collation'] != 'utf8_general_ci') {
-        $ret = safe_alter(SMD_BIO_META, 'CONVERT TO CHARACTER SET utf8 COLLATE utf8_general_ci');
-    }
-    if ($ret[1]['Collation'] != 'utf8_general_ci') {
-        $ret = safe_alter(SMD_BIO, 'CONVERT TO CHARACTER SET utf8 COLLATE utf8_general_ci');
-    }
-
-    // Alter the position field from int to varchar so positioning can be non-numeric
-    $ret = getThings("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = '".PFX.SMD_BIO_META."' AND table_schema = '" . $DB->db . "' AND column_name = 'position'");
-    if ($ret != 'varchar') {
-        safe_alter(SMD_BIO_META, "CHANGE `position` `position` VARCHAR( 16 ) NULL DEFAULT ''", $debug);
-    }
-    // Add the coltype and colsize columns
-    $flds = getThings('SHOW COLUMNS FROM `'.PFX.SMD_BIO_META.'`');
-    if (!in_array('coltype', $flds)) {
-        safe_alter(SMD_BIO_META, "ADD `coltype` SET(".doQuote(join("','", array_keys($smd_bio_coltypes))).") NOT NULL default '' after `size`", $debug);
-        safe_alter(SMD_BIO_META, "ADD `colsize` SMALLINT(4) NULL default 0 after `coltype`", $debug);
-    }
-    // Add multiple select list & date flavour support to the 'type' set, and rename 'text_input' to just 'text'
-    $toChange = safe_column('id', SMD_BIO_META, 'type="text_input"');
-    $fld = getRows("SHOW FULL COLUMNS FROM `".PFX.SMD_BIO_META."` LIKE 'type'");
-    $ft = $fld[0]['Type'];
-    if ( (strpos($ft, 'multilist') === false) || (strpos($ft, 'text_input') !== false) || (strpos($ft, 'month') === false) ) {
-        safe_alter(SMD_BIO_META, "CHANGE `type` `type` SET(".doQuote(join("','", array_keys($smd_bio_types))).")", $debug);
-    }
-    if ($toChange) {
-        safe_update(SMD_BIO_META, 'type="text"', "id in ('". join("','", $toChange) ."')", $debug);
-    }
-
-    if ($GLOBALS['txp_err_count'] == 0) {
-        $msg = gTxt('smd_bio_tbl_installed');
-    } else {
-        $msg = gTxt('smd_bio_tbl_not_installed');
-    }
-
-    if ($showpane) {
-        smd_bio_config($msg);
-    }
-}
-
-// ------------------------
-// Drop table if in database
-function smd_bio_table_remove($showpane=1) {
-    $ret = $msg = '';
-    $sql = array();
-    $GLOBALS['txp_err_count'] = 0;
-    $sql[] = "DROP TABLE IF EXISTS " .PFX.SMD_BIO. "; ";
-    $sql[] = "DROP TABLE IF EXISTS " .PFX.SMD_BIO_META. "; ";
-    if(gps('debug')) {
-        dmp($sql);
-    }
-    foreach ($sql as $qry) {
-        $ret = safe_query($qry);
-        if ($ret===false) {
-            $GLOBALS['txp_err_count']++;
-            echo "<b>".$GLOBALS['txp_err_count'].".</b> ".mysql_error()."<br />\n";
-            echo "<!--\n $qry \n-->\n";
-        }
-    }
-    if ($GLOBALS['txp_err_count'] == 0) {
-        $msg = gTxt('smd_bio_tbl_removed');
-    } else {
-        $msg = gTxt('smd_bio_tbl_not_removed');
-    }
-
-    if ($showpane) {
-        smd_bio_config($msg);
-    }
 }
 
 // ************************
 // PUBLIC-SIDE TAGS
 // ------------------------
 // Wrapper to permit bio info to be displayed for multiple authors
-function smd_bio_author($atts, $thing = null) {
+function smd_bio_author($atts, $thing = null)
+{
     global $smd_bio_author, $smd_bio_meta_data;
 
     extract(lAtts(array(
@@ -1827,7 +2165,8 @@ function smd_bio_author($atts, $thing = null) {
 }
 
 // Display biographical field data from a given user's profile
-function smd_bio_info($atts, $thing = null) {
+function smd_bio_info($atts, $thing = null)
+{
     global $smd_bio_data, $smd_bio_option_data;
 
     // Data cache
@@ -1967,10 +2306,12 @@ function smd_bio_info($atts, $thing = null) {
                 $smd_bio_data[$theName]['title'] = $theTitle;
                 $smd_bio_data[$theName]['class'] = $theClass;
                 $smd_bio_data[$theName]['type'] = $meta[$idx]['type'];
+
                 if (!in_array($meta[$idx]['type'], $list_types) && isset($meta[$idx]['val'])) {
                     $smd_bio_data[$theName]['default'] = $meta[$idx]['val'];
                     $replacements['{'.$prefixedName.'_default}'] = $meta[$idx]['val'];
                 }
+
                 $widget = '';
 
                 if ($field || $show_empty) {
@@ -1996,15 +2337,17 @@ function smd_bio_info($atts, $thing = null) {
                     if (in_array($meta[$idx]['type'], $list_types)) {
                         $chosens = do_list($field);
                         $nv = smd_bio_splitval($meta[$idx]['val']);
-                        list($nv, $dflt) = smd_bio_get_default($nv, $field);
+                        list($nv, $dflt) = $this->get_default($nv, $field);
                         $dflts = do_list($dflt);
                         $listctr=1;
                         $chosenctr=0;
+
                         foreach($nv as $listitem => $listlabel) {
                             $replacements['{'.$prefixedName.'_option_'.$listctr.'}'] = $listitem;
                             $replacements['{'.$prefixedName.'_title_'.$listctr.'}'] = $listlabel;
                             $smd_bio_data[$theName]['option_'.$listctr] = $listitem;
                             $smd_bio_data[$theName]['title_'.$listctr] = $listlabel;
+
                             if (in_array($listitem, $chosens)) {
                                 $chosenctr++;
                                 $replacements['{'.$prefixedName.'_chosen_option_'.$chosenctr.'}'] = $listitem;
@@ -2012,9 +2355,12 @@ function smd_bio_info($atts, $thing = null) {
                                 $smd_bio_data[$theName]['chosen_option_'.$chosenctr] = $listitem;
                                 $smd_bio_data[$theName]['chosen_title_'.$chosenctr] = $listlabel;
                             }
+
                             $listctr++;
                         }
+
                         $dfltctr = 1;
+
                         foreach($dflts as $dfltitem) {
                             $replacements['{'.$prefixedName.'_default_option_'.$dfltctr.'}'] = $dfltitem;
                             $smd_bio_data[$theName]['default_option_'.$dfltctr] = $dfltitem;
@@ -2105,7 +2451,8 @@ function smd_bio_info($atts, $thing = null) {
 }
 
 // Output data
-function smd_bio_data($atts, $thing = null) {
+function smd_bio_data($atts, $thing = null)
+{
     global $smd_bio_data, $smd_bio_option_data;
 
     extract(lAtts(array(
@@ -2138,7 +2485,8 @@ function smd_bio_data($atts, $thing = null) {
 }
 
 // Iterate over N multi-items
-function smd_bio_iterate($atts, $thing = null) {
+function smd_bio_iterate($atts, $thing = null)
+{
     global $smd_bio_data, $smd_bio_option_data;
 
     extract(lAtts(array(
@@ -2270,7 +2618,8 @@ function smd_bio_iterate($atts, $thing = null) {
 }
 
 // Convenience conditional to test a field/item. Use smd_if for more advanced conditional logic
-function smd_if_bio($atts, $thing = null) {
+function smd_if_bio($atts, $thing = null)
+{
     global $smd_bio_data, $smd_bio_option_data;
 
     extract(lAtts(array(
@@ -2305,7 +2654,8 @@ function smd_if_bio($atts, $thing = null) {
 }
 
 // Conditional to test bio meta data
-function smd_if_bio_is($atts, $thing = null) {
+function smd_if_bio_is($atts, $thing = null)
+{
     global $smd_bio_meta_data;
 
     extract(lAtts(array(
@@ -2330,11 +2680,13 @@ function smd_if_bio_is($atts, $thing = null) {
 }
 
 // Convenience conditional
-function smd_if_bio_first_author($atts, $thing = null) {
+function smd_if_bio_first_author($atts, $thing = null)
+{
     return smd_if_bio_is(array('type' => 'author', 'item' => 'first'), $thing);
 }
 // Convenience conditional
-function smd_if_bio_last_author($atts, $thing = null) {
+function smd_if_bio_last_author($atts, $thing = null)
+{
     return smd_if_bio_is(array('type' => 'author', 'item' => 'last'), $thing);
 }
 
@@ -2343,11 +2695,13 @@ function smd_if_bio_last_author($atts, $thing = null) {
 // A wrapper to article_custom that auto sets the user to the one specified
 // or the current article's author.
 // NOTE: lAtts() is NOT used because that limits the plugin attributes.
-function smd_bio_articles($atts, $thing = null) {
+function smd_bio_articles($atts, $thing = null)
+{
     global $thisarticle;
 
     $author = (isset($atts['author'])) ? $atts['author'] : (isset($thisarticle['authorid']) ? $thisarticle['authorid'] : '');
     $atts['author'] = $author;
+
     return parseArticles($atts, '1', $thing);
 }
 # --- END PLUGIN CODE ---
