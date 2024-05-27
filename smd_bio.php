@@ -1837,6 +1837,7 @@ function smd_bio_find_author($author_in='', $places=array('biotag', 'txpuser', '
             case 'ili':
                 // From currently logged-in user
                 $smd_bio_ili = ($smd_bio_ili === 0) ? is_logged_in() : $smd_bio_ili;
+
                 if ($smd_bio_ili) {
                     $author = $smd_bio_ili['name'];
                 }
@@ -1848,14 +1849,17 @@ function smd_bio_find_author($author_in='', $places=array('biotag', 'txpuser', '
             case 'selfreg':
                 // New author from mem_self_reg?
                 $aname = ps('name');
+
                 if ($aname == '') {
                     // New author from custom mem_form?
                     $aname = ps('smd_bio_name');
                 }
-                if ( ($mem_form_type == 'mem_self_register' || $mem_form_type == 'smd_bio') && ($aname != '') ) {
+
+                if (($mem_form_type == 'mem_self_register' || $mem_form_type == 'smd_bio') && ($aname != '')) {
                     // As long as $aname doesn't exist, let this new author in
                     //TODO: Cache this?
                     $exists = safe_row('*', 'txp_user', "name='".doSlash($aname)."'");
+
                     if (!$exists) {
                         $author = $aname;
                     }
@@ -2048,7 +2052,7 @@ function smd_bio_splitval($val)
 {
     $selv = array();
 
-    $wvals = preg_split("/[\r\n,]+/", $val, -1, PREG_SPLIT_NO_EMPTY);
+    $wvals = preg_split("/[\r\n,]+/", $val);
 
     foreach ($wvals as $wval) {
         $prts = explode('=>', $wval);
