@@ -1442,8 +1442,14 @@ EOJS;
 
                     if (array_key_exists($colname, $biocols)) {
                         $isNumber = (strpos($biocols[$colname], 'int') === 0);
+                        $isDate = in_array($biocols[$colname], array('date', 'datetime', 'time'));
                         $newVal = ($isNumber) ? intval($$var) : $$var;
-                        $sqlSet[] = "`$colname` = '".doSlash($newVal)."'";
+
+                        if ($isDate && empty($newVal)) {
+                            $sqlSet[] = "`$colname` = default";
+                        } else {
+                            $sqlSet[] = "`$colname` = '".doSlash($newVal)."'";
+                        }
                     }
                 }
 
