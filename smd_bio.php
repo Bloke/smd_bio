@@ -499,10 +499,11 @@ class smd_bio
     public function bio_multi_edit()
     {
         $selected = ps('selected');
+        $message = '';
 
-        if (!$selected or !is_array($selected))
-        {
-            smd_bio();
+        if (!$selected or !is_array($selected)) {
+            $this->bio_config($message);
+            return;
         }
 
         $selected = array_map('assert_string', $selected);
@@ -510,19 +511,19 @@ class smd_bio
         $changed  = array();
         $key = '';
 
-        switch ($method)
-        {
+        switch ($method) {
             case 'delete':
-                return $this->meta_del($selected);
-                break;
+                $changed = $this->meta_del($selected);
+                $message = gTxt('smd_bio_meta_deleted', array('{affected}' => join(', ', $changed)));
 
+                break;
             default:
                 $key = '';
                 $val = '';
                 break;
         }
 
-        smd_bio();
+        $this->bio_config($message);
     }
 
 
@@ -700,22 +701,22 @@ class smd_bio
     {
         $changed = array();
         $names  = $names ? array_map('assert_string', $names) : array(assert_string(ps('name')));
-        $message = '';
 
         foreach ($names as $name) {
             $exists = $this->meta_check($name);
-            $ret = @safe_alter(SMD_BIO, "DROP COLUMN `$name`");
+            $ret = safe_alter(SMD_BIO, "DROP COLUMN `$name`");
+
             if ($ret || $exists) {
                 $ret = safe_delete(SMD_BIO_META, "name='$name'");
                 $changed[] = $name;
             }
         }
 
-        $this->bio_config(gTxt('smd_bio_meta_deleted', array('{affected}' => join(', ', $changed))));
+        return $changed;
     }
 
     /**
-     * [smd_bio_meta_check description]
+     * [meta_check description]
      * @param  [type] $col [description]
      * @return [type]      [description]
      */
@@ -724,6 +725,7 @@ class smd_bio
         $ucols = getThings('describe `'.PFX.'txp_users`');
         $bcols = getThings('describe `'.PFX.SMD_BIO.'`');
         $cols = array_merge($ucols, $bcols);
+
         return (!in_array($col, $cols));
     }
 
