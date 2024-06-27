@@ -538,7 +538,7 @@ class smd_bio
     public function usersMultiEditOptions($evt, $stp, &$options)
     {
         $options += array(
-            'bio_export' => gTxt('smd_bio_export_csv'),
+            'smd_bio_export' => gTxt('smd_bio_export_csv'),
         );
     }
 
@@ -1555,7 +1555,7 @@ EOJS;
                         safe_delete(SMD_BIO, "user_ref IN ('".join("','", doSlash($names))."')");
                     }
                     break;
-                case 'bio_export':
+                case 'smd_bio_export':
                     $this->exportCsv($selected);
                 default:
                     break;
