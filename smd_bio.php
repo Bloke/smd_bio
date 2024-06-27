@@ -61,6 +61,7 @@ smd_bio_admin_tab => Bio config
 #@smd_bio
 smd_bio_colsize => Column size
 smd_bio_coltype => Column type
+smd_bio_export_csv => Export CSV
 smd_bio_help => ?
 smd_bio_help_unused => Unused for this Type
 smd_bio_meta_add => Add bio field
@@ -204,9 +205,10 @@ class smd_bio
         // Note these are all pre Txp's involvement.
         register_callback(array($this, 'bio_save'), 'admin', 'author_save', 1);
         register_callback(array($this, 'bio_save'), 'admin', 'author_save_new', 1);
-        register_callback(array($this, 'bio_delete'), 'admin', 'admin_multi_edit', 1);
+        register_callback(array($this, 'bio_multi_edit_handle'), 'admin', 'admin_multi_edit', 1);
         register_callback(array($this, 'get_image'), 'admin', 'smd_bio_get_image', 1);
         register_callback(array($this, 'get_ebio'), 'admin', 'smd_bio_get_ebio', 1);
+        register_callback(array($this, 'usersMultiEditOptions'), 'admin_ui', 'multi_edit_options');
 
         // Call the installer in case the lifecycle event didn't fire.
         $this->install();
@@ -526,6 +528,19 @@ class smd_bio
         $this->bio_config($message);
     }
 
+    /**
+     * [multiEditOptions description]
+     * @param  [type] $evt      [description]
+     * @param  [type] $stp      [description]
+     * @param  [type] &$options [description]
+     * @return [type]           [description]
+     */
+    public function usersMultiEditOptions($evt, $stp, &$options)
+    {
+        $options += array(
+            'bio_export' => gTxt('smd_bio_export_csv'),
+        );
+    }
 
     /**
      * [make_list description]
@@ -727,6 +742,48 @@ class smd_bio
         $cols = array_merge($ucols, $bcols);
 
         return (!in_array($col, $cols));
+    }
+
+    /**
+     * [exportCsv description]
+     * @param  array $selected List of selected records
+     */
+    public function exportCsv($selected)
+    {
+        $filename = "users_" . date('Y-m-d') . ".csv";
+        $delimiter = ",";
+        $user_names = quote_list($selected);
+        $fields = array();
+
+        $f = fopen('php://memory', 'w');
+        $ufields = safe_query('SHOW COLUMNS FROM ' . PFX . 'txp_users');
+        $bfields = safe_query('SELECT name AS Field FROM smd_bio_meta ORDER BY position, name');
+
+        foreach ($ufields as $fld) {
+            if (!in_array($fld['Field'], array('pass', 'nonce', 'last_access', 'privs'))) {
+                $fields[] = doSlash($fld['Field']);
+        }
+        }
+
+        foreach ($bfields as $fld) {
+            $fields[] = doSlash($fld['Field']);
+        }
+
+        $rs = safe_query('SELECT ' . join(',', $fields) . ' FROM txp_users LEFT JOIN ' . SMD_BIO . ' ON (' . SMD_BIO . '.user_ref = ' . PFX . 'txp_users.name) WHERE ' . PFX . 'txp_users.name IN (' . join(',', $user_names) . ') ');
+
+        // Stuff the header row in the CSV file.
+        fputcsv($f, $fields, $delimiter);
+
+        // Tack on the data.
+        foreach ($rs as $row) {
+            fputcsv($f, $row, $delimiter);
+        }
+
+        rewind($f);
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename='.$filename);
+        echo stream_get_contents($f);
+        exit;
     }
 
     // ************************
@@ -1143,6 +1200,14 @@ function smd_bio_multisel(dest) {
     jQuery('#'+dest).val(out.join(','));
 }
 jQuery(function() {
+    jQuery('#txp-list-container').closest('main').off('submit', 'form[name="longform"]').on('submit', 'form[name="longform"]', function (e) {
+            if (jQuery("#bulk_edit").val() == "bio_export") return true;
+            e.preventDefault();
+            textpattern.Relay.callback('updateList', {
+                data: $(this).serializeArray()
+            });
+    })
+
     // Grab images from the server when the select/textbox change
     jQuery(".smd_bio_image_id").blur(function() {
         id = jQuery(this).attr('id');
@@ -1463,39 +1528,48 @@ EOJS;
     }
 
     /**
-     * Delete one or more bios via multi-edit.
+     * Handles User-panel multi-edit (delete, export, etc).
      *
      * @param  string $evt Textpattern event
      * @param  string $stp Textpattern step
      */
-    public function bio_delete($evt, $stp)
+    public function bio_multi_edit_handle($evt, $stp)
     {
         global $txp_user;
 
         if ($this->table_exist()) {
-            // Since we are executing 'pre' delete we need to unfortunately duplicate some of the checks
-            // from txp_admin.php so we minimise the opportunity to delete someone by mistake
+            // Since we are executing 'pre' Textpattern we need to unfortunately duplicate some of the checks
+            // from txp_admin.php so we minimise the opportunity to delete someone by mistake.
             $selected = ps('selected');
             $method = ps('edit_method');
+
             if (!$selected or !is_array($selected)) {
                 return;
             }
-            if ($method != 'delete') {
-                return;
+
+            switch ($method) {
+                case 'delete':
+                    $names = safe_column('name', 'txp_users', "name IN ('".join("','", doSlash($selected))."') AND name != '".doSlash($txp_user)."'");
+                    if (!$names) return;
+
+                    $assign_assets = ps('assign_assets');
+
+                    if ($assign_assets === '') {
+                        return;
+                    } elseif (in_array($assign_assets, $names)) {
+                        return;
+                    } else {
+                        // All the checks passed -- do it
+                        safe_delete(SMD_BIO, "user_ref IN ('".join("','", doSlash($names))."')");
+                    }
+                    break;
+                case 'bio_export':
+                    $this->exportCsv($selected);
+                default:
+                    break;
             }
 
-            $names = safe_column('name', 'txp_users', "name IN ('".join("','", doSlash($selected))."') AND name != '".doSlash($txp_user)."'");
-            if (!$names) return;
-
-            $assign_assets = ps('assign_assets');
-            if ($assign_assets === '') {
-                return;
-            } elseif (in_array($assign_assets, $names)) {
-                return;
-            } else {
-                // All the checks passed -- do it
-                safe_delete(SMD_BIO, "user_ref IN ('".join("','", doSlash($names))."')");
-            }
+            return;
         }
     }
 
