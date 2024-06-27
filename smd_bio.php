@@ -760,7 +760,7 @@ class smd_bio
         $bfields = safe_query('SELECT name AS Field FROM smd_bio_meta ORDER BY position, name');
 
         foreach ($ufields as $fld) {
-            if (!in_array($fld['Field'], array('pass', 'nonce', 'last_access', 'privs'))) {
+            if (!in_array($fld['Field'], array('pass', 'nonce', 'last_access'))) {
                 $fields[] = doSlash($fld['Field']);
         }
         }
@@ -1200,14 +1200,6 @@ function smd_bio_multisel(dest) {
     jQuery('#'+dest).val(out.join(','));
 }
 jQuery(function() {
-    jQuery('#txp-list-container').closest('main').off('submit', 'form[name="longform"]').on('submit', 'form[name="longform"]', function (e) {
-            if (jQuery("#bulk_edit").val() == "bio_export") return true;
-            e.preventDefault();
-            textpattern.Relay.callback('updateList', {
-                data: $(this).serializeArray()
-            });
-    })
-
     // Grab images from the server when the select/textbox change
     jQuery(".smd_bio_image_id").blur(function() {
         id = jQuery(this).attr('id');
