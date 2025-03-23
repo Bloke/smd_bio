@@ -115,13 +115,6 @@ if (!defined('txpinterface'))
  */
 use \Textpattern\Search\Filter;
 
-if (!defined('SMD_BIO')) {
-    define("SMD_BIO", 'smd_bio');
-}
-if (!defined('SMD_BIO_META')) {
-    define("SMD_BIO_META", 'smd_bio_meta');
-}
-
 if (txpinterface === 'admin') {
     new smd_bio();
 }
@@ -324,7 +317,7 @@ class smd_bio
 
         if ($id && $step == 'meta_edit') {
             $id = assert_int($id);
-            $rs = safe_row('*', SMD_BIO_META, "id = $id");
+            $rs = safe_row('*', 'smd_bio_meta', "id = $id");
             extract($rs);
         }
 
@@ -428,7 +421,7 @@ class smd_bio
 
         $switch_dir = ($dir == 'desc') ? 'asc' : 'desc';
 
-        $rs = safe_rows_start('*', SMD_BIO_META, '1=1 ORDER BY '.$sort_sql);
+        $rs = safe_rows_start('*', 'smd_bio_meta', '1=1 ORDER BY '.$sort_sql);
         $out = array();
 
         if ($rs) {
@@ -616,10 +609,10 @@ class smd_bio
         }
 
         // Try to adjust column type/size if applicable
-        $rs = safe_alter(SMD_BIO, "CHANGE `$name` `$name` $coltype" . (($colsize) ? "($colsize)" : '') . " NULL" . (($hasDefault) ? " DEFAULT NULL" : ''));
+        $rs = safe_alter('smd_bio', "CHANGE `$name` `$name` $coltype" . (($colsize) ? "($colsize)" : '') . " NULL" . (($hasDefault) ? " DEFAULT NULL" : ''));
 
         if ($rs) {
-            $rs = safe_update(SMD_BIO_META, "
+            $rs = safe_update('smd_bio_meta', "
                 title = '$title',
                 type = '$type',
                 size = '$size',
@@ -682,11 +675,11 @@ class smd_bio
                 $colsize = null;
             }
 
-            $ret = safe_alter(SMD_BIO, "ADD `$name` $coltype" . (($colsize) ? "($colsize)" : '') . " NULL" . (($hasDefault) ? " DEFAULT NULL" : ''));
+            $ret = safe_alter('smd_bio', "ADD `$name` $coltype" . (($colsize) ? "($colsize)" : '') . " NULL" . (($hasDefault) ? " DEFAULT NULL" : ''));
             $val = doSlash($this->make_list($val));
 
             if ($ret) {
-                $rs = safe_insert(SMD_BIO_META, "
+                $rs = safe_insert('smd_bio_meta', "
                     name = '$name',
                     title = '$title',
                     type = '$type',
@@ -719,10 +712,10 @@ class smd_bio
 
         foreach ($names as $name) {
             $exists = $this->meta_check($name);
-            $ret = safe_alter(SMD_BIO, "DROP COLUMN `$name`");
+            $ret = safe_alter('smd_bio', "DROP COLUMN `$name`");
 
             if ($ret || $exists) {
-                $ret = safe_delete(SMD_BIO_META, "name='$name'");
+                $ret = safe_delete('smd_bio_meta', "name='$name'");
                 $changed[] = $name;
             }
         }
@@ -738,7 +731,7 @@ class smd_bio
     protected function meta_check($col)
     {
         $ucols = getThings('describe `'.PFX.'txp_users`');
-        $bcols = getThings('describe `'.PFX.SMD_BIO.'`');
+        $bcols = getThings('describe `'.PFX.'smd_bio`');
         $cols = array_merge($ucols, $bcols);
 
         return (!in_array($col, $cols));
@@ -757,7 +750,7 @@ class smd_bio
 
         $f = fopen('php://memory', 'w');
         $ufields = safe_query('SHOW COLUMNS FROM ' . PFX . 'txp_users');
-        $bfields = safe_query('SELECT name AS Field FROM smd_bio_meta ORDER BY position, name');
+        $bfields = safe_query('SELECT name AS Field FROM ' . PFX . 'smd_bio_meta ORDER BY position, name');
 
         foreach ($ufields as $fld) {
             if (!in_array($fld['Field'], array('pass', 'nonce', 'last_access'))) {
@@ -769,7 +762,7 @@ class smd_bio
             $fields[] = doSlash($fld['Field']);
         }
 
-        $rs = safe_query('SELECT ' . join(',', $fields) . ' FROM txp_users LEFT JOIN ' . SMD_BIO . ' ON (' . SMD_BIO . '.user_ref = ' . PFX . 'txp_users.name) WHERE ' . PFX . 'txp_users.name IN (' . join(',', $user_names) . ') ');
+        $rs = safe_query('SELECT ' . join(',', $fields) . ' FROM ' . PFX . 'txp_users LEFT JOIN ' . PFX . 'smd_bio ON (' . PFX . 'smd_bio.user_ref = ' . PFX . 'txp_users.name) WHERE ' . PFX . 'txp_users.name IN (' . join(',', $user_names) . ') ');
 
         // Stuff the header row in the CSV file.
         fputcsv($f, $fields, $delimiter);
@@ -803,7 +796,7 @@ class smd_bio
         static $colinfo = null;
 
         if ($colinfo === null) {
-            $colinfo = safe_rows('*', SMD_BIO_META, '1=1 ORDER BY position');
+            $colinfo = safe_rows('*', 'smd_bio_meta', '1=1 ORDER BY position');
         }
 
         switch ($stp) {
@@ -822,7 +815,7 @@ class smd_bio
                         default:
                             $data[$row['name']] =
                                  array(
-                                    'column' => SMD_BIO.'.'.$row['name'],
+                                    'column' => PFX . 'smd_bio.'.$row['name'],
                                     'label'  => $row['title'],
                                 );
                             break;
@@ -831,7 +824,8 @@ class smd_bio
 
                 break;
             case 'from':
-                $data .= ' LEFT JOIN ' . SMD_BIO . ' ON (' . SMD_BIO . '.user_ref = ' . PFX . 'txp_users.name)';
+                // Note no table prefix for txp_users since it's aliased.
+                $data .= ' LEFT JOIN ' . PFX . 'smd_bio ON (' . PFX . 'smd_bio.user_ref = txp_users.name)';
                 break;
         }
     }
@@ -859,7 +853,7 @@ class smd_bio
             }
 
             $methods[$colname] = array(
-                'column' => SMD_BIO . '.' . $colname,
+                'column' => PFX . 'smd_bio.' . $colname,
                 'label'  => $opts['title'],
                 'type'   => $type,
             );
@@ -881,7 +875,7 @@ class smd_bio
         $uname = safe_field('name', 'txp_users', "user_id = '".doSlash($row['user_id'])."'");
 
         if ($this->columns) {
-            $vals = safe_row(join(', ', array_keys($this->columns)), SMD_BIO, "user_ref='".doSlash($uname)."'");
+            $vals = safe_row(join(', ', array_keys($this->columns)), 'smd_bio', "user_ref='".doSlash($uname)."'");
         }
 
         foreach ($vals as $val) {
@@ -912,12 +906,12 @@ class smd_bio
                 extract(gpsa(array('user_id')));
 
                 if (!empty($user_id)) {
-                    $uname = safe_field('name','txp_users',"user_id = '".doSlash($user_id)."'");
-                    $vals = safe_row('*', SMD_BIO, "user_ref='".doSlash($uname)."'");
+                    $uname = safe_field('name', 'txp_users', "user_id = '".doSlash($user_id)."'");
+                    $vals = safe_row('*', 'smd_bio', "user_ref='".doSlash($uname)."'");
                 }
             }
 
-            $widgets = safe_rows('*', SMD_BIO_META, '1=1 ORDER BY position');
+            $widgets = safe_rows('*', 'smd_bio_meta', '1=1 ORDER BY position');
 
             foreach ($widgets as $widget) {
                 $val = ($vals && isset($vals[$widget['name']])) ? $vals[$widget['name']] : $widget['val'];
@@ -1488,7 +1482,7 @@ EOJS;
                 }
 
                 extract(gpsa($targetvars));
-                $bcols = getRows('describe `'.PFX.SMD_BIO.'`');
+                $bcols = getRows('describe `' . PFX . 'smd_bio`');
                 $sqlSet = array();
                 $biocols = array();
 
@@ -1513,7 +1507,7 @@ EOJS;
                 }
 
                 if ($sqlSet) {
-                    $rs = safe_upsert(SMD_BIO, join(',', $sqlSet), "`user_ref` = '".doSlash($user_ref)."'");
+                    $rs = safe_upsert('smd_bio', join(',', $sqlSet), "`user_ref` = '".doSlash($user_ref)."'");
                 }
             }
         }
@@ -1552,7 +1546,7 @@ EOJS;
                         return;
                     } else {
                         // All the checks passed -- do it
-                        safe_delete(SMD_BIO, "user_ref IN ('".join("','", doSlash($names))."')");
+                        safe_delete('smd_bio', "user_ref IN ('".join("','", doSlash($names))."')");
                     }
                     break;
                 case 'smd_bio_export':
@@ -1709,8 +1703,8 @@ EOJS;
             return ($smd_bio_table_ok['meta'] === $smd_bio_table_ok['field']);
         }
 
-        $meta = safe_count(SMD_BIO_META, '1=1');
-        $flds = safe_show('columns', SMD_BIO);
+        $meta = safe_count('smd_bio_meta', '1=1');
+        $flds = safe_show('columns', 'smd_bio');
 
         $smd_bio_table_ok['meta'] = (int)$meta;
         $smd_bio_table_ok['field'] = (int)count($flds) - 1; // Subtract the user_ref column as it's always present
@@ -1734,12 +1728,12 @@ EOJS;
 
         $ret = '';
         $sql = array();
-        $sql[] = "CREATE TABLE IF NOT EXISTS `".PFX.SMD_BIO."` (
+        $sql[] = "CREATE TABLE IF NOT EXISTS `".PFX."smd_bio` (
             `user_ref` varchar(64) NOT NULL default '',
             UNIQUE KEY `user_ref` (`user_ref`)
         ) PACK_KEYS=1";
 
-        $sql[] = "CREATE TABLE IF NOT EXISTS `".PFX.SMD_BIO_META."` (
+        $sql[] = "CREATE TABLE IF NOT EXISTS `".PFX."smd_bio_meta` (
             `id` int(4) NOT NULL auto_increment,
             `title` varchar(64) NULL default '',
             `name` varchar(64) NOT NULL default '',
@@ -1769,30 +1763,30 @@ EOJS;
 
         // Handle upgrades.
         // Alter the position field from int to varchar so positioning can be non-numeric.
-        $ret = getThings("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = '".PFX.SMD_BIO_META."' AND table_schema = '" . $DB->db . "' AND column_name = 'position'");
+        $ret = getThings("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name = '".PFX."smd_bio_meta' AND table_schema = '" . $DB->db . "' AND column_name = 'position'");
         if ($ret != 'varchar') {
-            safe_alter(SMD_BIO_META, "CHANGE `position` `position` VARCHAR( 16 ) NULL DEFAULT ''", $debug);
+            safe_alter('smd_bio_meta', "CHANGE `position` `position` VARCHAR( 16 ) NULL DEFAULT ''", $debug);
         }
 
         // Add the coltype and colsize columns.
-        $flds = getThings('SHOW COLUMNS FROM `'.PFX.SMD_BIO_META.'`');
+        $flds = getThings('SHOW COLUMNS FROM `'.PFX.'smd_bio_meta`');
 
         if (!in_array('coltype', $flds)) {
-            safe_alter(SMD_BIO_META, "ADD `coltype` SET(".doQuote(join("','", array_keys($smd_bio_coltypes))).") NOT NULL default '' after `size`", $debug);
-            safe_alter(SMD_BIO_META, "ADD `colsize` SMALLINT(4) NULL default 0 after `coltype`", $debug);
+            safe_alter('smd_bio_meta', "ADD `coltype` SET(".doQuote(join("','", array_keys($smd_bio_coltypes))).") NOT NULL default '' after `size`", $debug);
+            safe_alter('smd_bio_meta', "ADD `colsize` SMALLINT(4) NULL default 0 after `coltype`", $debug);
         }
 
         // Add multiple select list & date flavour support to the 'type' set, and rename 'text_input' to just 'text'
-        $toChange = safe_column('id', SMD_BIO_META, 'type="text_input"');
-        $fld = getRows("SHOW FULL COLUMNS FROM `".PFX.SMD_BIO_META."` LIKE 'type'");
+        $toChange = safe_column('id', 'smd_bio_meta', 'type="text_input"');
+        $fld = getRows("SHOW FULL COLUMNS FROM `".PFX."smd_bio_meta` LIKE 'type'");
         $ft = $fld[0]['Type'];
 
         if ( (strpos($ft, 'multilist') === false) || (strpos($ft, 'text_input') !== false) || (strpos($ft, 'month') === false) ) {
-            safe_alter(SMD_BIO_META, "CHANGE `type` `type` SET(".doQuote(join("','", array_keys($smd_bio_types))).")", $debug);
+            safe_alter('smd_bio_meta', "CHANGE `type` `type` SET(".doQuote(join("','", array_keys($smd_bio_types))).")", $debug);
         }
 
         if ($toChange) {
-            safe_update(SMD_BIO_META, 'type="text"', "id in ('". join("','", $toChange) ."')", $debug);
+            safe_update('smd_bio_meta', 'type="text"', "id in ('". join("','", $toChange) ."')", $debug);
         }
 
         if ($GLOBALS['txp_err_count'] == 0) {
@@ -1810,8 +1804,8 @@ EOJS;
         $ret = $msg = '';
         $sql = array();
         $GLOBALS['txp_err_count'] = 0;
-        $sql[] = "DROP TABLE IF EXISTS " .PFX.SMD_BIO. "; ";
-        $sql[] = "DROP TABLE IF EXISTS " .PFX.SMD_BIO_META. "; ";
+        $sql[] = "DROP TABLE IF EXISTS " .PFX. "smd_bio; ";
+        $sql[] = "DROP TABLE IF EXISTS " .PFX. "smd_bio_meta; ";
 
         if(gps('debug')) {
             dmp($sql);
@@ -1852,14 +1846,14 @@ function smd_bio_form_submit() {
 
     if ($author) {
         $core_cols = smd_bio_core_cols();
-        $meta_cols = safe_column('name', SMD_BIO_META, '1=1');
+        $meta_cols = safe_column('name', 'smd_bio_meta', '1=1');
         $query_params = array(
             'core' => array(
-                'tbl' => 'txp_users',
+                'tbl' => PFX.'txp_users',
                 'ref' => 'name',
             ),
             'bio' => array(
-                'tbl' => SMD_BIO,
+                'tbl' => PFX.'smd_bio',
                 'ref' => 'user_ref',
             )
         );
@@ -2216,7 +2210,7 @@ function smd_bio_author($atts, $thing = null)
         if (strpos(strtolower($user), "smd_privs") === 0) {
             $aprivs = explode(':', $user);
             array_shift($aprivs); // Remove smd_privs token from the array
-            $rows = safe_query('SELECT txpu.name FROM ' . PFX . 'txp_users AS txpu LEFT JOIN ' . PFX.SMD_BIO . ' AS smdb ON txpu.name = smdb.user_ref WHERE privs in (' . doQuote(join("','", $aprivs)) . ')'.$sort);
+            $rows = safe_query('SELECT txpu.name FROM ' . PFX . 'txp_users AS txpu LEFT JOIN ' . PFX . 'smd_bio AS smdb ON txpu.name = smdb.user_ref WHERE privs in (' . doQuote(join("','", $aprivs)) . ')'.$sort);
 
             if ($rows) {
                 while ($a = nextRow($rows)) {
@@ -2224,7 +2218,7 @@ function smd_bio_author($atts, $thing = null)
                 }
             }
         } else if (strpos(strtolower($user), "smd_all") === 0) {
-            $rows = safe_query('SELECT txpu.name FROM ' . PFX . 'txp_users AS txpu LEFT JOIN ' . PFX.SMD_BIO . ' AS smdb ON txpu.name = smdb.user_ref WHERE 1=1'.$sort);
+            $rows = safe_query('SELECT txpu.name FROM ' . PFX . 'txp_users AS txpu LEFT JOIN ' . PFX . 'smd_bio AS smdb ON txpu.name = smdb.user_ref WHERE 1=1'.$sort);
             if ($rows) {
                 while ($a = nextRow($rows)) {
                     $authors[] = $a['name'];
@@ -2320,9 +2314,9 @@ function smd_bio_info($atts, $thing = null)
     $mm_types = array('number', 'range');
 
     if ($author) {
-        $meta = (empty($meta)) ? safe_rows('*', SMD_BIO_META, '1=1') : $meta;
+        $meta = (empty($meta)) ? safe_rows('*', 'smd_bio_meta', '1=1') : $meta;
         $cmeta = (empty($cmeta)) ? safe_show('columns', 'txp_users') : $cmeta;
-        $metacols = (empty($metacols)) ? safe_column('name', SMD_BIO_META, '1=1') : $metacols;
+        $metacols = (empty($metacols)) ? safe_column('name', 'smd_bio_meta', '1=1') : $metacols;
         $num = count($meta);
 
         foreach ($cmeta as $info) {
@@ -2352,7 +2346,7 @@ function smd_bio_info($atts, $thing = null)
             $ebio = $bio_info[$author]['ebio'];
         } else {
             $cbio = $bio_info[$author]['cbio'] = safe_row('*', 'txp_users', "name='".doSlash($author)."'");
-            $ebio = $bio_info[$author]['ebio'] = safe_row('*', SMD_BIO, "user_ref='".doSlash($author)."'");
+            $ebio = $bio_info[$author]['ebio'] = safe_row('*', 'smd_bio', "user_ref='".doSlash($author)."'");
         }
 
         $replacements = $out = $toParse = array();
