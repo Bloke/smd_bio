@@ -192,7 +192,7 @@ class smd_bio
 
         register_callback(array($this, 'welcome'), 'plugin_lifecycle.smd_bio');
         register_callback(array($this, 'searchMethods'), 'search_criteria', 'admin');
-        register_callback(array($this, 'listHandler'), 'user', null, 'list');
+        register_callback(array($this, 'listHandler'), 'user', '', 'list');
         register_callback(array($this, 'listRow'), 'user_ui', 'list.row');
 
         // Note these are all pre Txp's involvement.
